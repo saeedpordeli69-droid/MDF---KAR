@@ -1,6 +1,7 @@
 package ir.mdfkar.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.os.Bundle
 import android.graphics.Canvas
 import android.graphics.Color
@@ -18,6 +19,8 @@ import android.widget.Spinner
 import android.widget.ArrayAdapter
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
+import org.json.JSONObject
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -229,6 +232,10 @@ class MainActivity : Activity() {
         shelfPvcCheck = check("PVC لبه جلویی کف و طبقه‌ها", "PVC on front edges of bottom and shelves", "shelfPvc", true)
         listOf(includeBackCheck, legsCheck, doorPvcCheck, sidePvcCheck, shelfPvcCheck).forEach { content.addView(it) }
 
+        content.addView(label("مدیریت پروژه", "Project management", 18f))
+        content.addView(button("ذخیره پروژه", "Save project") { saveProjectDialog() })
+        content.addView(button("باز کردن پروژه ذخیره‌شده", "Open saved project") { chooseProjectToLoad() })
+
         content.addView(button("محاسبه قطعات و چیدمان برش", "Calculate parts and cutting layout") {
             saveSettings()
             calculate()
@@ -243,6 +250,112 @@ class MainActivity : Activity() {
         content.addView(resultText)
         content.addView(label("توجه: این چیدمان تخمینی است؛ پیش از برش واقعی، ابعاد، جهت رگه، لبه‌چسبانی و تلرانس دستگاه را بررسی کنید.", "Warning: this is an estimated layout. Verify dimensions, grain direction, edge banding and machine tolerances before cutting.", 12f))
         setContentView(root)
+    }
+
+
+    private fun projectsDirectory(): File = File(filesDir, "projects").apply { if (!exists()) mkdirs() }
+
+    private fun projectValues(): JSONObject {
+        return JSONObject().apply {
+            put("width", widthInput.text.toString())
+            put("height", heightInput.text.toString())
+            put("depth", depthInput.text.toString())
+            put("thickness", thicknessInput.text.toString())
+            put("shelves", shelfInput.text.toString())
+            put("doors", doorInput.text.toString())
+            put("plinth", plinthInput.text.toString())
+            put("backThickness", backThicknessInput.text.toString())
+            put("sheetWidth", sheetWidthInput.text.toString())
+            put("sheetHeight", sheetHeightInput.text.toString())
+            put("kerf", kerfInput.text.toString())
+            put("cabinetType", cabinetSpinner.selectedItemPosition)
+            put("includeBack", includeBackCheck.isChecked)
+            put("legs", legsCheck.isChecked)
+            put("doorPvc", doorPvcCheck.isChecked)
+            put("sidePvc", sidePvcCheck.isChecked)
+            put("shelfPvc", shelfPvcCheck.isChecked)
+            put("english", english)
+        }
+    }
+
+    private fun saveProjectDialog() {
+        val nameInput = EditText(this).apply {
+            hint = tr("نام پروژه (مثلاً کابینت آشپزخانه)", "Project name (e.g. kitchen cabinet)")
+            setSingleLine(true)
+            setTextColor(ink)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(tr("ذخیره پروژه", "Save project"))
+            .setMessage(tr("برای این طرح یک نام وارد کنید.", "Enter a name for this design."))
+            .setView(nameInput)
+            .setNegativeButton(tr("انصراف", "Cancel"), null)
+            .setPositiveButton(tr("ذخیره", "Save")) { _, _ ->
+                val name = nameInput.text.toString().trim()
+                if (name.isBlank()) {
+                    Toast.makeText(this, tr("نام پروژه را وارد کنید.", "Enter a project name."), Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                try {
+                    val safeName = name.replace(Regex("[^\\p{L}\\p{N} _.-]"), "_").take(60).ifBlank { "project" }
+                    val file = File(projectsDirectory(), "$safeName.json")
+                    val data = projectValues().put("projectName", name)
+                    file.writeText(data.toString(2), Charsets.UTF_8)
+                    saveSettings()
+                    Toast.makeText(this, tr("پروژه ذخیره شد.", "Project saved."), Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) {
+                    Toast.makeText(this, tr("ذخیره پروژه انجام نشد.", "Could not save project."), Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
+    }
+
+    private fun chooseProjectToLoad() {
+        val files = projectsDirectory().listFiles { file -> file.isFile && file.extension.equals("json", true) }
+            ?.sortedBy { it.name.lowercase(Locale.ROOT) } ?: emptyList()
+        if (files.isEmpty()) {
+            Toast.makeText(this, tr("هنوز پروژه‌ای ذخیره نشده است.", "No saved projects yet."), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val names = files.map { file ->
+            try { JSONObject(file.readText(Charsets.UTF_8)).optString("projectName", file.nameWithoutExtension) }
+            catch (_: Exception) { file.nameWithoutExtension }
+        }
+        AlertDialog.Builder(this)
+            .setTitle(tr("انتخاب پروژه", "Choose a project"))
+            .setItems(names.toTypedArray()) { _, which -> loadProject(files[which]) }
+            .setNegativeButton(tr("انصراف", "Cancel"), null)
+            .show()
+    }
+
+    private fun loadProject(file: File) {
+        try {
+            val data = JSONObject(file.readText(Charsets.UTF_8))
+            fun putText(key: String, field: EditText) {
+                if (data.has(key)) field.setText(data.optString(key, ""))
+            }
+            putText("width", widthInput)
+            putText("height", heightInput)
+            putText("depth", depthInput)
+            putText("thickness", thicknessInput)
+            putText("shelves", shelfInput)
+            putText("doors", doorInput)
+            putText("plinth", plinthInput)
+            putText("backThickness", backThicknessInput)
+            putText("sheetWidth", sheetWidthInput)
+            putText("sheetHeight", sheetHeightInput)
+            putText("kerf", kerfInput)
+            cabinetSpinner.setSelection(data.optInt("cabinetType", 0).coerceIn(0, 1))
+            includeBackCheck.isChecked = data.optBoolean("includeBack", true)
+            legsCheck.isChecked = data.optBoolean("legs", true)
+            doorPvcCheck.isChecked = data.optBoolean("doorPvc", true)
+            sidePvcCheck.isChecked = data.optBoolean("sidePvc", true)
+            shelfPvcCheck.isChecked = data.optBoolean("shelfPvc", true)
+            saveSettings()
+            calculate()
+            Toast.makeText(this, tr("پروژه بارگذاری شد.", "Project loaded."), Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(this, tr("فایل پروژه قابل خواندن نیست.", "Could not read project file."), Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
