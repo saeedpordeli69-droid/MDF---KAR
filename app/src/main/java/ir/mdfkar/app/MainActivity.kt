@@ -235,6 +235,7 @@ class MainActivity : Activity() {
         content.addView(label("مدیریت پروژه", "Project management", 18f))
         content.addView(button("ذخیره پروژه", "Save project") { saveProjectDialog() })
         content.addView(button("باز کردن پروژه ذخیره‌شده", "Open saved project") { chooseProjectToLoad() })
+        content.addView(button("مدیریت پروژه‌ها (تغییر نام / حذف)", "Manage projects (rename / delete)") { manageProjects() })
 
         content.addView(button("محاسبه قطعات و چیدمان برش", "Calculate parts and cutting layout") {
             saveSettings()
@@ -296,7 +297,7 @@ class MainActivity : Activity() {
                     return@setPositiveButton
                 }
                 try {
-                    val safeName = name.replace(Regex("[^\\p{L}\\p{N} _.-]"), "_").take(60).ifBlank { "project" }
+                    val safeName = safeProjectFileName(name)
                     val file = File(projectsDirectory(), "$safeName.json")
                     val data = projectValues().put("projectName", name)
                     file.writeText(data.toString(2), Charsets.UTF_8)
@@ -309,17 +310,120 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun chooseProjectToLoad() {
-        val files = projectsDirectory().listFiles { file -> file.isFile && file.extension.equals("json", true) }
-            ?.sortedBy { it.name.lowercase(Locale.ROOT) } ?: emptyList()
+    private fun listProjectFiles(): List<File> =
+        projectsDirectory().listFiles { file -> file.isFile && file.extension.equals("json", true) }
+            ?.sortedBy { projectDisplayName(it).lowercase(Locale.ROOT) } ?: emptyList()
+
+    private fun projectDisplayName(file: File): String {
+        return try {
+            JSONObject(file.readText(Charsets.UTF_8)).optString("projectName", file.nameWithoutExtension)
+        } catch (_: Exception) {
+            file.nameWithoutExtension
+        }
+    }
+
+    private fun safeProjectFileName(name: String): String =
+        name.replace(Regex("[^\\p{L}\\p{N} _.-]"), "_").take(60).ifBlank { "project" }
+
+    private fun manageProjects() {
+        val files = listProjectFiles()
         if (files.isEmpty()) {
             Toast.makeText(this, tr("هنوز پروژه‌ای ذخیره نشده است.", "No saved projects yet."), Toast.LENGTH_SHORT).show()
             return
         }
-        val names = files.map { file ->
-            try { JSONObject(file.readText(Charsets.UTF_8)).optString("projectName", file.nameWithoutExtension) }
-            catch (_: Exception) { file.nameWithoutExtension }
+        val names = files.map { projectDisplayName(it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(tr("مدیریت پروژه‌ها", "Manage projects"))
+            .setItems(names) { _, which -> showProjectActions(files[which]) }
+            .setNegativeButton(tr("بستن", "Close"), null)
+            .show()
+    }
+
+    private fun showProjectActions(file: File) {
+        val displayName = projectDisplayName(file)
+        AlertDialog.Builder(this)
+            .setTitle(displayName)
+            .setItems(arrayOf(
+                tr("باز کردن پروژه", "Open project"),
+                tr("تغییر نام", "Rename"),
+                tr("حذف پروژه", "Delete project")
+            )) { _, which ->
+                when (which) {
+                    0 -> loadProject(file)
+                    1 -> renameProject(file)
+                    2 -> confirmDeleteProject(file)
+                }
+            }
+            .setNegativeButton(tr("انصراف", "Cancel"), null)
+            .show()
+    }
+
+    private fun renameProject(file: File) {
+        val nameInput = EditText(this).apply {
+            hint = tr("نام جدید پروژه", "New project name")
+            setSingleLine(true)
+            setTextColor(ink)
+            setText(projectDisplayName(file))
+            setSelection(text.length)
         }
+        AlertDialog.Builder(this)
+            .setTitle(tr("تغییر نام پروژه", "Rename project"))
+            .setView(nameInput)
+            .setNegativeButton(tr("انصراف", "Cancel"), null)
+            .setPositiveButton(tr("ذخیره نام", "Save name")) { _, _ ->
+                val newName = nameInput.text.toString().trim()
+                if (newName.isBlank()) {
+                    Toast.makeText(this, tr("نام پروژه خالی نباشد.", "Project name cannot be empty."), Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                try {
+                    val safeName = safeProjectFileName(newName)
+                    val target = File(projectsDirectory(), "$safeName.json")
+                    if (target.exists() && target.canonicalPath != file.canonicalPath) {
+                        Toast.makeText(this, tr("پروژه‌ای با این نام وجود دارد.", "A project with this name already exists."), Toast.LENGTH_LONG).show()
+                        return@setPositiveButton
+                    }
+                    val data = JSONObject(file.readText(Charsets.UTF_8))
+                    data.put("projectName", newName)
+                    if (target.canonicalPath == file.canonicalPath) {
+                        file.writeText(data.toString(2), Charsets.UTF_8)
+                    } else {
+                        target.writeText(data.toString(2), Charsets.UTF_8)
+                        if (!file.delete()) {
+                            target.delete()
+                            throw IllegalStateException("Could not remove old project file")
+                        }
+                    }
+                    Toast.makeText(this, tr("نام پروژه تغییر کرد.", "Project renamed."), Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) {
+                    Toast.makeText(this, tr("تغییر نام پروژه انجام نشد.", "Could not rename project."), Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
+    }
+
+    private fun confirmDeleteProject(file: File) {
+        AlertDialog.Builder(this)
+            .setTitle(tr("حذف پروژه", "Delete project"))
+            .setMessage(tr("پروژه «${projectDisplayName(file)}» حذف شود؟ این کار قابل بازگشت نیست.", "Delete project “${projectDisplayName(file)}”? This cannot be undone."))
+            .setNegativeButton(tr("انصراف", "Cancel"), null)
+            .setPositiveButton(tr("حذف", "Delete")) { _, _ ->
+                if (file.delete()) {
+                    Toast.makeText(this, tr("پروژه حذف شد.", "Project deleted."), Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, tr("حذف پروژه انجام نشد.", "Could not delete project."), Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
+    }
+
+    private fun chooseProjectToLoad() {
+        val files = listProjectFiles()
+        if (files.isEmpty()) {
+            Toast.makeText(this, tr("هنوز پروژه‌ای ذخیره نشده است.", "No saved projects yet."), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val names = files.map { projectDisplayName(it) }
         AlertDialog.Builder(this)
             .setTitle(tr("انتخاب پروژه", "Choose a project"))
             .setItems(names.toTypedArray()) { _, which -> loadProject(files[which]) }
