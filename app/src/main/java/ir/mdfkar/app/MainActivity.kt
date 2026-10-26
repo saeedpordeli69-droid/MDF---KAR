@@ -111,7 +111,7 @@ class MainActivity : Activity() {
             setTextColor(ink)
             setHintTextColor(Color.GRAY)
             setPadding(16, 8, 16, 8)
-            layoutDirection = View.LAYOUT_DIRECTION.LTR
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
             textAlignment = View.TEXT_ALIGNMENT_VIEW_START
             setBackgroundColor(Color.WHITE)
         }
