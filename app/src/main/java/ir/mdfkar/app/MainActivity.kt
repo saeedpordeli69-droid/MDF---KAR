@@ -1,3 +1,4 @@
+
 package ir.mdfkar.app
 
 import android.app.Activity
@@ -13,13 +14,13 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.util.Locale
 
 class MainActivity : Activity() {
+
     private var english = false
-    private lateinit var root: LinearLayout
-    private lateinit var content: LinearLayout
-    private lateinit var languageButton: Button
+
     private lateinit var widthInput: EditText
     private lateinit var heightInput: EditText
     private lateinit var depthInput: EditText
@@ -38,35 +39,56 @@ class MainActivity : Activity() {
     private fun faDigits(value: String): String {
         val en = "0123456789"
         val fa = "۰۱۲۳۴۵۶۷۸۹"
+
         return value.map { ch ->
             val idx = en.indexOf(ch)
-            if (idx >= 0) fa[idx] else if (ch == '.') '٫' else ch
+            if (idx >= 0) fa[idx]
+            else if (ch == '.') '٫'
+            else ch
         }.joinToString("")
     }
 
     private fun number(text: String): Double? {
         val normalized = text
-            .replace('۰', '0').replace('۱', '1').replace('۲', '2')
-            .replace('۳', '3').replace('۴', '4').replace('۵', '5')
-            .replace('۶', '6').replace('۷', '7').replace('۸', '8')
-            .replace('۹', '9').replace('٫', '.').replace(',', '.')
-            .replace('٠', '0').replace('١', '1').replace('٢', '2')
-            .replace('٣', '3').replace('٤', '4').replace('٥', '5')
-            .replace('٦', '6').replace('٧', '7').replace('٨', '8').replace('٩', '9')
+            .replace('۰', '0').replace('۱', '1')
+            .replace('۲', '2').replace('۳', '3')
+            .replace('۴', '4').replace('۵', '5')
+            .replace('۶', '6').replace('۷', '7')
+            .replace('۸', '8').replace('۹', '9')
+            .replace('٫', '.').replace(',', '.')
+            .replace('٠', '0').replace('١', '1')
+            .replace('٢', '2').replace('٣', '3')
+            .replace('٤', '4').replace('٥', '5')
+            .replace('٦', '6').replace('٧', '7')
+            .replace('٨', '8').replace('٩', '9')
+
         return normalized.toDoubleOrNull()
     }
 
-    private fun label(textFa: String, textEn: String, size: Float = 15f): TextView {
+    private fun label(
+        textFa: String,
+        textEn: String,
+        size: Float = 15f
+    ): TextView {
         return TextView(this).apply {
             text = if (english) textEn else textFa
             textSize = size
             setTextColor(dark)
+
             gravity = if (english) Gravity.START else Gravity.END
-            layoutDirection = if (english) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
+
+            layoutDirection = if (english) {
+                View.LAYOUT_DIRECTION_LTR
+            } else {
+                View.LAYOUT_DIRECTION_RTL
+            }
         }
     }
 
-    private fun field(hintFa: String, hintEn: String): EditText {
+    private fun field(
+        hintFa: String,
+        hintEn: String
+    ): EditText {
         return EditText(this).apply {
             hint = if (english) hintEn else hintFa
             textSize = 16f
@@ -80,7 +102,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun button(textFa: String, textEn: String, action: () -> Unit): Button {
+    private fun button(
+        textFa: String,
+        textEn: String,
+        action: () -> Unit
+    ): Button {
         return Button(this).apply {
             text = if (english) textEn else textFa
             isAllCaps = false
@@ -91,17 +117,24 @@ class MainActivity : Activity() {
     }
 
     private fun buildScreen() {
-        root = LinearLayout(this).apply {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(pale)
-            layoutDirection = if (english) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
+
+            layoutDirection = if (english) {
+                View.LAYOUT_DIRECTION_LTR
+            } else {
+                View.LAYOUT_DIRECTION_RTL
+            }
         }
+
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(18, 12, 18, 12)
             setBackgroundColor(dark)
         }
+
         val title = TextView(this).apply {
             text = if (english) "MDF Kar" else "ام‌دی‌اف‌کار"
             textSize = 23f
@@ -109,50 +142,98 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
         }
-        languageButton = Button(this).apply {
+
+        val languageButton = Button(this).apply {
             text = if (english) "فارسی" else "English"
             isAllCaps = false
+
             setOnClickListener {
                 english = !english
                 buildScreen()
             }
         }
+
         header.addView(title)
         header.addView(languageButton)
         root.addView(header)
 
         val scroll = ScrollView(this)
-        content = LinearLayout(this).apply {
+
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(18, 18, 18, 24)
         }
+
         scroll.addView(content)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        content.addView(label("نسخه اولیه برنامه نجاری و کابینت‌سازی", "Woodworking & Cabinet App — Starter", 18f))
-        content.addView(label("ابعاد پروژه (میلی‌متر)", "Project dimensions (millimeters)").apply {
-            setPadding(0, 18, 0, 8)
-        })
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(-1, 0, 1f)
+        )
 
-        widthInput = field("عرض", "Width")
-        heightInput = field("ارتفاع", "Height")
-        depthInput = field("عمق", "Depth")
-        thicknessInput = field("ضخامت ورق (مثلاً ۱۶)", "Board thickness (e.g. 16)")
-        listOf(widthInput, heightInput, depthInput, thicknessInput).forEach {
+        content.addView(
+            label(
+                "نسخه اولیه برنامه نجاری و کابینت‌سازی",
+                "Woodworking & Cabinet App — Starter",
+                18f
+            )
+        )
+
+        content.addView(
+            label(
+                "ابعاد کابینت (میلی‌متر)",
+                "Cabinet dimensions (millimeters)"
+            ).apply {
+                setPadding(0, 18, 0, 8)
+            }
+        )
+
+        widthInput = field("عرض کابینت", "Cabinet width")
+        heightInput = field("ارتفاع کابینت", "Cabinet height")
+        depthInput = field("عمق کابینت", "Cabinet depth")
+
+        thicknessInput = field(
+            "ضخامت ورق (مثلاً ۱۶)",
+            "Board thickness (e.g. 16)"
+        )
+
+        listOf(
+            widthInput,
+            heightInput,
+            depthInput,
+            thicknessInput
+        ).forEach {
             val lp = LinearLayout.LayoutParams(-1, -2)
             lp.bottomMargin = 10
             content.addView(it, lp)
         }
-        resultText = label("ابعاد را وارد کنید و محاسبه را بزنید.", "Enter dimensions and calculate.")
+
+        resultText = label(
+            "ابعاد را وارد کنید و محاسبه را بزنید.",
+            "Enter dimensions and calculate."
+        )
+
         resultText.setPadding(0, 12, 0, 12)
-        content.addView(button("محاسبه اولیه", "Calculate draft") { calculate() })
+
+        content.addView(
+            button("محاسبه و لیست برش", "Calculate cutting list") {
+                calculate()
+            }
+        )
+
         content.addView(resultText)
 
-        content.addView(label("بخش‌های برنامه", "App modules").apply {
-            setPadding(0, 20, 0, 8)
-            textSize = 18f
-            typeface = Typeface.DEFAULT_BOLD
-        })
+        content.addView(
+            label(
+                "بخش‌های برنامه",
+                "App modules"
+            ).apply {
+                setPadding(0, 20, 0, 8)
+                textSize = 18f
+                typeface = Typeface.DEFAULT_BOLD
+            }
+        )
+
         val modules = listOf(
             "آنالیز قطعات" to "Parts analysis",
             "نقشه برش کات‌مستر" to "Cutting layout",
@@ -163,23 +244,39 @@ class MainActivity : Activity() {
             "یراق‌آلات و قیمت‌گذاری" to "Hardware and costing",
             "سفارش‌ها و حساب مشتری" to "Orders and customer ledger"
         )
+
         modules.forEach { (fa, en) ->
             val b = Button(this).apply {
                 text = "•  " + if (english) en else fa
                 isAllCaps = false
-                gravity = if (english) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.END or Gravity.CENTER_VERTICAL
+
+                gravity = if (english) {
+                    Gravity.START or Gravity.CENTER_VERTICAL
+                } else {
+                    Gravity.END or Gravity.CENTER_VERTICAL
+                }
+
                 setTextColor(dark)
                 setBackgroundColor(Color.WHITE)
+
                 setOnClickListener {
-                    Toast.makeText(this@MainActivity,
-                        if (english) "This module will be added in the next development steps." else "این بخش در مراحل بعدی توسعه تکمیل می‌شود.",
-                        Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this@MainActivity,
+                        if (english) {
+                            "This module will be added in later development."
+                        } else {
+                            "این بخش در مراحل بعدی توسعه تکمیل می‌شود."
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
+
             val lp = LinearLayout.LayoutParams(-1, -2)
             lp.bottomMargin = 7
             content.addView(b, lp)
         }
+
         setContentView(root)
     }
 
@@ -188,18 +285,56 @@ class MainActivity : Activity() {
         val h = number(heightInput.text.toString())
         val d = number(depthInput.text.toString())
         val t = number(thicknessInput.text.toString())
-        if (w == null || h == null || d == null || t == null ||
-            w <= 0 || h <= 0 || d <= 0 || t <= 0) {
-            resultText.text = if (english) "Please enter valid positive dimensions." else "لطفاً همه ابعاد را به‌درستی وارد کنید."
+
+        if (
+            w == null || h == null || d == null || t == null ||
+            w <= 0 || h <= 0 || d <= 0 || t <= 0 ||
+            w <= 2 * t
+        ) {
+            resultText.text = if (english) {
+                "Enter valid positive dimensions. Width must exceed twice the board thickness."
+            } else {
+                "ابعاد معتبر وارد کنید. عرض باید بیشتر از دو برابر ضخامت ورق باشد."
+            }
             return
         }
-        val area = (w * h + 2 * h * d + 2 * w * d) / 1_000_000.0
-        val fmt = DecimalFormat("0.##", java.text.DecimalFormatSymbols(Locale.US))
+
+        val innerWidth = w - 2 * t
+        val railHeight = 100.0
+
+        val fmt = DecimalFormat(
+            "0.##",
+            DecimalFormatSymbols(Locale.US)
+        )
+
         val raw = if (english) {
-            "Dimensions: ${fmt.format(w)} × ${fmt.format(h)} × ${fmt.format(d)} mm\\nBoard thickness: ${fmt.format(t)} mm\\nApproximate surface area: ${fmt.format(area)} m²\\nNote: this is a preliminary estimate, not a cutting list."
+            "PRELIMINARY CUTTING LIST (mm)\n\n" +
+            "1. Side panels: 2 pieces — " +
+            "${fmt.format(h)} × ${fmt.format(d)}\n" +
+            "2. Bottom panel: 1 piece — " +
+            "${fmt.format(innerWidth)} × ${fmt.format(d)}\n" +
+            "3. Shelf: 1 piece — " +
+            "${fmt.format(innerWidth)} × ${fmt.format(d)}\n" +
+            "4. Top rails: 2 pieces — " +
+            "${fmt.format(innerWidth)} × ${fmt.format(railHeight)}\n\n" +
+            "Board thickness: ${fmt.format(t)} mm\n\n" +
+            "Assumptions: one shelf, two top rails, no back panel or doors.\n" +
+            "Preliminary list only. Verify construction details before cutting."
         } else {
-            "ابعاد: ${fmt.format(w)} × ${fmt.format(h)} × ${fmt.format(d)} میلی‌متر\\nضخامت ورق: ${fmt.format(t)} میلی‌متر\\nمساحت تقریبی سطوح: ${fmt.format(area)} مترمربع\\nتوجه: این فقط برآورد اولیه است و هنوز لیست برش اجرایی نیست."
+            "لیست برش اولیه کابینت (میلی‌متر)\n\n" +
+            "۱. پهلوها: ۲ عدد — " +
+            "${fmt.format(h)} × ${fmt.format(d)}\n" +
+            "۲. کف کابینت: ۱ عدد — " +
+            "${fmt.format(innerWidth)} × ${fmt.format(d)}\n" +
+            "۳. طبقه داخلی: ۱ عدد — " +
+            "${fmt.format(innerWidth)} × ${fmt.format(d)}\n" +
+            "۴. کلاف بالایی: ۲ عدد — " +
+            "${fmt.format(innerWidth)} × ${fmt.format(railHeight)}\n\n" +
+            "ضخامت ورق: ${fmt.format(t)} میلی‌متر\n\n" +
+            "فرض محاسبه: یک طبقه، دو کلاف بالایی، بدون پشت و درب.\n" +
+            "این لیست اولیه است؛ قبل از برش، جزئیات ساخت را بررسی کنید."
         }
+
         resultText.text = if (english) raw else faDigits(raw)
     }
 }
