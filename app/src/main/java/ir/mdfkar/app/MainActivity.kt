@@ -8,6 +8,7 @@ import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -25,6 +26,8 @@ class MainActivity : Activity() {
     private lateinit var heightInput: EditText
     private lateinit var depthInput: EditText
     private lateinit var thicknessInput: EditText
+    private lateinit var doorCountInput: EditText
+    private lateinit var backCheck: CheckBox
     private lateinit var resultText: TextView
 
     private val green = Color.rgb(20, 125, 114)
@@ -39,10 +42,9 @@ class MainActivity : Activity() {
     private fun faDigits(value: String): String {
         val en = "0123456789"
         val fa = "۰۱۲۳۴۵۶۷۸۹"
-
         return value.map { ch ->
-            val idx = en.indexOf(ch)
-            if (idx >= 0) fa[idx]
+            val i = en.indexOf(ch)
+            if (i >= 0) fa[i]
             else if (ch == '.') '٫'
             else ch
         }.joinToString("")
@@ -61,33 +63,30 @@ class MainActivity : Activity() {
             .replace('٤', '4').replace('٥', '5')
             .replace('٦', '6').replace('٧', '7')
             .replace('٨', '8').replace('٩', '9')
-
         return normalized.toDoubleOrNull()
     }
 
     private fun label(
-        textFa: String,
-        textEn: String,
+        fa: String,
+        en: String,
         size: Float = 15f
     ): TextView {
         return TextView(this).apply {
-            text = if (english) textEn else textFa
+            text = if (english) en else fa
             textSize = size
             setTextColor(dark)
-
             gravity = if (english) Gravity.START else Gravity.END
-
-            layoutDirection = if (english) {
+            layoutDirection = if (english)
                 View.LAYOUT_DIRECTION_LTR
-            } else {
+            else
                 View.LAYOUT_DIRECTION_RTL
-            }
         }
     }
 
     private fun field(
         hintFa: String,
-        hintEn: String
+        hintEn: String,
+        defaultValue: String = ""
     ): EditText {
         return EditText(this).apply {
             hint = if (english) hintEn else hintFa
@@ -99,16 +98,17 @@ class MainActivity : Activity() {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             textAlignment = View.TEXT_ALIGNMENT_VIEW_START
             setBackgroundColor(Color.WHITE)
+            if (defaultValue.isNotEmpty()) setText(defaultValue)
         }
     }
 
-    private fun button(
-        textFa: String,
-        textEn: String,
+    private fun actionButton(
+        fa: String,
+        en: String,
         action: () -> Unit
     ): Button {
         return Button(this).apply {
-            text = if (english) textEn else textFa
+            text = if (english) en else fa
             isAllCaps = false
             setTextColor(Color.WHITE)
             setBackgroundColor(green)
@@ -120,12 +120,10 @@ class MainActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(pale)
-
-            layoutDirection = if (english) {
+            layoutDirection = if (english)
                 View.LAYOUT_DIRECTION_LTR
-            } else {
+            else
                 View.LAYOUT_DIRECTION_RTL
-            }
         }
 
         val header = LinearLayout(this).apply {
@@ -146,7 +144,6 @@ class MainActivity : Activity() {
         val languageButton = Button(this).apply {
             text = if (english) "فارسی" else "English"
             isAllCaps = false
-
             setOnClickListener {
                 english = !english
                 buildScreen()
@@ -158,122 +155,129 @@ class MainActivity : Activity() {
         root.addView(header)
 
         val scroll = ScrollView(this)
-
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(18, 18, 18, 24)
         }
 
         scroll.addView(content)
-
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(-1, 0, 1f)
-        )
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         content.addView(
             label(
-                "نسخه اولیه برنامه نجاری و کابینت‌سازی",
-                "Woodworking & Cabinet App — Starter",
-                18f
-            )
-        )
-
-        content.addView(
-            label(
-                "ابعاد کابینت (میلی‌متر)",
-                "Cabinet dimensions (millimeters)"
+                "محاسبه کابینت زمینی",
+                "Base cabinet calculator",
+                20f
             ).apply {
-                setPadding(0, 18, 0, 8)
+                typeface = Typeface.DEFAULT_BOLD
+            }
+        )
+
+        content.addView(
+            label(
+                "تمام اندازه‌ها برحسب میلی‌متر هستند.",
+                "All dimensions are in millimeters."
+            ).apply {
+                setPadding(0, 8, 0, 14)
             }
         )
 
         widthInput = field("عرض کابینت", "Cabinet width")
-        heightInput = field("ارتفاع کابینت", "Cabinet height")
+        heightInput = field("ارتفاع بدنه کابینت", "Cabinet body height")
         depthInput = field("عمق کابینت", "Cabinet depth")
-
         thicknessInput = field(
-            "ضخامت ورق (مثلاً ۱۶)",
-            "Board thickness (e.g. 16)"
+            "ضخامت ورق بدنه",
+            "Carcass board thickness",
+            "16"
+        )
+        doorCountInput = field(
+            "تعداد درب: صفر، یک یا دو",
+            "Door count: 0, 1 or 2",
+            "0"
         )
 
         listOf(
             widthInput,
             heightInput,
             depthInput,
-            thicknessInput
-        ).forEach {
+            thicknessInput,
+            doorCountInput
+        ).forEach { input ->
             val lp = LinearLayout.LayoutParams(-1, -2)
             lp.bottomMargin = 10
-            content.addView(it, lp)
+            content.addView(input, lp)
         }
 
-        resultText = label(
-            "ابعاد را وارد کنید و محاسبه را بزنید.",
-            "Enter dimensions and calculate."
-        )
-
-        resultText.setPadding(0, 12, 0, 12)
+        backCheck = CheckBox(this).apply {
+            text = if (english)
+                "Include 3 mm back panel"
+            else
+                "محاسبه پشت کابینت با ورق ۳ میلی‌متر"
+            isChecked = false
+            setTextColor(dark)
+        }
+        content.addView(backCheck)
 
         content.addView(
-            button("محاسبه و لیست برش", "Calculate cutting list") {
-                calculate()
+            label(
+                "فرض این نسخه: یک طبقه داخلی و دو کلاف بالایی ۱۰ سانتی‌متری.",
+                "Assumption: one shelf and two 100 mm top rails."
+            ).apply {
+                setPadding(0, 8, 0, 12)
             }
         )
 
+        resultText = label(
+            "ابعاد را وارد کن و محاسبه را بزن.",
+            "Enter dimensions and calculate."
+        )
+        resultText.setPadding(0, 14, 0, 14)
+
+        content.addView(
+            actionButton("محاسبه لیست برش", "Calculate cutting list") {
+                calculate()
+            }
+        )
         content.addView(resultText)
 
         content.addView(
             label(
-                "بخش‌های برنامه",
-                "App modules"
+                "مراحل بعدی توسعه",
+                "Upcoming modules",
+                18f
             ).apply {
-                setPadding(0, 20, 0, 8)
-                textSize = 18f
                 typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, 18, 0, 8)
             }
         )
 
         val modules = listOf(
-            "آنالیز قطعات" to "Parts analysis",
-            "نقشه برش کات‌مستر" to "Cutting layout",
-            "تعیین لبه‌های PVC" to "PVC edge mapping",
-            "تعداد ورق و میزان پرت" to "Board count and waste",
-            "کشو و محاسبات کابینت" to "Drawer and cabinet sizing",
-            "برگه چاپی خدمات برش / PDF" to "Printable cutting sheet / PDF",
-            "یراق‌آلات و قیمت‌گذاری" to "Hardware and costing",
-            "سفارش‌ها و حساب مشتری" to "Orders and customer ledger"
+            "تعداد طبقات قابل تنظیم" to "Adjustable shelf count",
+            "پایه و پاخور کابینت" to "Legs and plinth",
+            "لبه‌های PVC" to "PVC edge mapping",
+            "بهینه‌سازی چیدمان ورق" to "Board cutting optimization",
+            "خروجی PDF خدمات برش" to "Cutting sheet PDF"
         )
 
         modules.forEach { (fa, en) ->
             val b = Button(this).apply {
-                text = "•  " + if (english) en else fa
+                text = if (english) en else fa
                 isAllCaps = false
-
-                gravity = if (english) {
-                    Gravity.START or Gravity.CENTER_VERTICAL
-                } else {
-                    Gravity.END or Gravity.CENTER_VERTICAL
-                }
-
                 setTextColor(dark)
                 setBackgroundColor(Color.WHITE)
-
                 setOnClickListener {
                     Toast.makeText(
                         this@MainActivity,
-                        if (english) {
-                            "This module will be added in later development."
-                        } else {
-                            "این بخش در مراحل بعدی توسعه تکمیل می‌شود."
-                        },
+                        if (english)
+                            "This feature is planned for the next development stage."
+                        else
+                            "این قابلیت در مرحله بعد اضافه می‌شود.",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             }
-
             val lp = LinearLayout.LayoutParams(-1, -2)
-            lp.bottomMargin = 7
+            lp.bottomMargin = 6
             content.addView(b, lp)
         }
 
@@ -285,56 +289,70 @@ class MainActivity : Activity() {
         val h = number(heightInput.text.toString())
         val d = number(depthInput.text.toString())
         val t = number(thicknessInput.text.toString())
+        val doorsValue = number(doorCountInput.text.toString())
 
         if (
             w == null || h == null || d == null || t == null ||
+            doorsValue == null ||
             w <= 0 || h <= 0 || d <= 0 || t <= 0 ||
-            w <= 2 * t
+            w <= 2 * t || doorsValue % 1.0 != 0.0 ||
+            doorsValue < 0 || doorsValue > 2
         ) {
-            resultText.text = if (english) {
-                "Enter valid positive dimensions. Width must exceed twice the board thickness."
-            } else {
-                "ابعاد معتبر وارد کنید. عرض باید بیشتر از دو برابر ضخامت ورق باشد."
-            }
+            resultText.text = if (english)
+                "Check all dimensions, board thickness and door count (0–2)."
+            else
+                "ابعاد و ضخامت را بررسی کن. تعداد درب باید صفر، یک یا دو باشد."
             return
         }
 
         val innerWidth = w - 2 * t
-        val railHeight = 100.0
+        val doorCount = doorsValue.toInt()
+        val fmt = DecimalFormat("0.##", DecimalFormatSymbols(Locale.US))
+        val pieces = mutableListOf<String>()
 
-        val fmt = DecimalFormat(
-            "0.##",
-            DecimalFormatSymbols(Locale.US)
-        )
-
-        val raw = if (english) {
-            "PRELIMINARY CUTTING LIST (mm)\n\n" +
-            "1. Side panels: 2 pieces — " +
-            "${fmt.format(h)} × ${fmt.format(d)}\n" +
-            "2. Bottom panel: 1 piece — " +
-            "${fmt.format(innerWidth)} × ${fmt.format(d)}\n" +
-            "3. Shelf: 1 piece — " +
-            "${fmt.format(innerWidth)} × ${fmt.format(d)}\n" +
-            "4. Top rails: 2 pieces — " +
-            "${fmt.format(innerWidth)} × ${fmt.format(railHeight)}\n\n" +
-            "Board thickness: ${fmt.format(t)} mm\n\n" +
-            "Assumptions: one shelf, two top rails, no back panel or doors.\n" +
-            "Preliminary list only. Verify construction details before cutting."
-        } else {
-            "لیست برش اولیه کابینت (میلی‌متر)\n\n" +
-            "۱. پهلوها: ۲ عدد — " +
-            "${fmt.format(h)} × ${fmt.format(d)}\n" +
-            "۲. کف کابینت: ۱ عدد — " +
-            "${fmt.format(innerWidth)} × ${fmt.format(d)}\n" +
-            "۳. طبقه داخلی: ۱ عدد — " +
-            "${fmt.format(innerWidth)} × ${fmt.format(d)}\n" +
-            "۴. کلاف بالایی: ۲ عدد — " +
-            "${fmt.format(innerWidth)} × ${fmt.format(railHeight)}\n\n" +
-            "ضخامت ورق: ${fmt.format(t)} میلی‌متر\n\n" +
-            "فرض محاسبه: یک طبقه، دو کلاف بالایی، بدون پشت و درب.\n" +
-            "این لیست اولیه است؛ قبل از برش، جزئیات ساخت را بررسی کنید."
+        fun addPiece(fa: String, en: String, count: Int, a: Double, b: Double) {
+            if (english) {
+                pieces.add("$en: $count pcs — ${fmt.format(a)} × ${fmt.format(b)}")
+            } else {
+                pieces.add("$fa: $count عدد — ${faDigits(fmt.format(a))} × ${faDigits(fmt.format(b))}")
+            }
         }
 
-        resultText.text = if (english) raw else faDigits(raw)
+        addPiece("پهلوهای بدنه", "Side panels", 2, h, d)
+        addPiece("کف کابینت", "Bottom panel", 1, innerWidth, d)
+        addPiece("طبقه داخلی", "Shelf", 1, innerWidth, d)
+        addPiece("کلاف‌های بالایی", "Top rails", 2, innerWidth, 100.0)
+
+        if (backCheck.isChecked) {
+            addPiece("پشت کابینت (ورق ۳ میلی‌متر)", "Back panel (3 mm)", 1, w, h)
+        }
+
+        if (doorCount == 1) {
+            addPiece("درب", "Door", 1, w - 3, h - 3)
+        } else if (doorCount == 2) {
+            addPiece("درب‌های مساوی", "Equal doors", 2, (w - 4) / 2, h - 3)
+        }
+
+        val text = buildString {
+            append(
+                if (english) "PRELIMINARY CUTTING LIST\n\n"
+                else "لیست برش اولیه کابینت\n\n"
+            )
+            append(pieces.joinToString("\n"))
+            append("\n\n")
+            append(
+                if (english) "Carcass board thickness: ${fmt.format(t)} mm"
+                else "ضخامت ورق بدنه: ${faDigits(fmt.format(t))} میلی‌متر"
+            )
+            append("\n\n")
+            append(
+                if (english)
+                    "Assumptions: one shelf, two 100 mm rails. Door sizes assume 3 mm total clearance for one door, or 4 mm total width clearance for two doors. Hinges, edge banding, back grooves and installation details are not included. Verify before cutting."
+                else
+                    "فرض‌ها: یک طبقه و دو کلاف ۱۰۰ میلی‌متری. اندازه درب‌ها با فرض فاصله نصب تقریبی محاسبه شده است. لولا، PVC، شیار پشت و جزئیات نصب لحاظ نشده‌اند؛ قبل از برش اندازه‌ها را بررسی کن."
+            )
+        }
+
+        resultText.text = text
     }
 }
