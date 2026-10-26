@@ -70,7 +70,7 @@ class MainActivity : Activity() {
         return EditText(this).apply {
             hint = if (english) hintEn else hintFa
             textSize = 16f
-            singleLine = true
+            setSingleLine(true)
             setTextColor(Color.BLACK)
             setHintTextColor(Color.GRAY)
             setPadding(18, 8, 18, 8)
