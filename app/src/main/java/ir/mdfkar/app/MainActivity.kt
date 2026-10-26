@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -30,10 +31,13 @@ import kotlin.math.min
 
 class MainActivity : Activity() {
 
-    private val dark = Color.rgb(34, 43, 48)
-    private val green = Color.rgb(36, 130, 93)
-    private val pale = Color.rgb(244, 247, 245)
-    private val ink = Color.rgb(35, 43, 40)
+    private val dark = Color.rgb(18, 25, 38)
+    private val green = Color.rgb(37, 112, 235)
+    private val pale = Color.rgb(13, 19, 30)
+    private val ink = Color.rgb(237, 243, 252)
+    private val card = Color.rgb(25, 34, 49)
+    private val fieldFill = Color.rgb(32, 43, 60)
+    private val muted = Color.rgb(155, 173, 198)
 
     private var english = false
     private lateinit var root: LinearLayout
@@ -112,23 +116,31 @@ class MainActivity : Activity() {
             textSize = 16f
             setSingleLine(true)
             setTextColor(ink)
-            setHintTextColor(Color.GRAY)
+            setHintTextColor(muted)
             setPadding(16, 8, 16, 8)
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-            setBackgroundColor(Color.WHITE)
+            background = rounded(fieldFill, 12, Color.rgb(56, 73, 98), 1)
         }
     }
 
     private fun tr(fa: String, en: String) = if (english) en else fa
 
+    private fun rounded(color: Int, radiusDp: Int, strokeColor: Int? = null, strokeDp: Int = 0): GradientDrawable {
+        return GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radiusDp).toFloat()
+            if (strokeColor != null && strokeDp > 0) setStroke(dp(strokeDp), strokeColor)
+        }
+    }
+
     private fun label(fa: String, en: String, size: Float = 15f): TextView {
         return TextView(this).apply {
             text = tr(fa, en)
             textSize = size
-            setTextColor(ink)
+            setTextColor(if (size >= 18f) Color.rgb(106, 170, 255) else ink)
             if (size >= 18f) setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(0, 8, 0, 8)
+            setPadding(0, 12, 0, 8)
         }
     }
 
@@ -137,7 +149,8 @@ class MainActivity : Activity() {
             text = tr(fa, en)
             isAllCaps = false
             setTextColor(Color.WHITE)
-            setBackgroundColor(green)
+            background = rounded(green, 14, Color.rgb(91, 157, 255), 1)
+            setPadding(12, 10, 12, 10)
             setOnClickListener { action() }
         }
     }
@@ -147,6 +160,7 @@ class MainActivity : Activity() {
             text = tr(fa, en)
             textSize = 14f
             setTextColor(ink)
+            buttonTintList = android.content.res.ColorStateList.valueOf(Color.rgb(76, 145, 255))
             isChecked = prefs().getBoolean(key, default)
         }
     }
@@ -166,8 +180,8 @@ class MainActivity : Activity() {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(16, 8, 16, 8)
-            setBackgroundColor(dark)
+            setPadding(16, 14, 16, 14)
+            background = rounded(dark, 0)
         }
         val title = TextView(this).apply {
             text = tr("ام‌دی‌اف‌کار | محاسبه و برش", "MDF Kar | Cut Planner")
@@ -179,6 +193,8 @@ class MainActivity : Activity() {
         val languageButton = Button(this).apply {
             text = if (english) "فارسی" else "English"
             isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = rounded(Color.rgb(42, 57, 79), 12, Color.rgb(76, 145, 255), 1)
             setOnClickListener {
                 saveSettings()
                 english = !english
@@ -193,7 +209,8 @@ class MainActivity : Activity() {
         val scroll = ScrollView(this)
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(16, 12, 16, 22)
+            setPadding(16, 14, 16, 24)
+            background = rounded(pale, 0)
         }
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -235,7 +252,7 @@ class MainActivity : Activity() {
         content.addView(label("مدیریت پروژه", "Project management", 18f))
         content.addView(button("ذخیره پروژه", "Save project") { saveProjectDialog() })
         content.addView(button("باز کردن پروژه ذخیره‌شده", "Open saved project") { chooseProjectToLoad() })
-        content.addView(button("مدیریت پروژه‌ها (تغییر نام / حذف)", "Manage projects (rename / delete)") { manageProjects() })
+        content.addView(button("مدیریت پروژه‌ها", "Manage projects") { manageProjectsDialog() })
 
         content.addView(button("محاسبه قطعات و چیدمان برش", "Calculate parts and cutting layout") {
             saveSettings()
@@ -243,7 +260,7 @@ class MainActivity : Activity() {
         })
         content.addView(label("نقشه چیدمان ورق", "Sheet layout", 18f))
         layoutView = SheetLayoutView()
-        layoutView.setBackgroundColor(Color.WHITE)
+        layoutView.background = rounded(card, 16, Color.rgb(56, 73, 98), 1)
         content.addView(layoutView, LinearLayout.LayoutParams(-1, dp(240)))
         resultText = label("ابعاد را وارد کنید و محاسبه را بزنید.", "Enter dimensions and calculate.")
         resultText.textSize = 14f
@@ -297,7 +314,7 @@ class MainActivity : Activity() {
                     return@setPositiveButton
                 }
                 try {
-                    val safeName = safeProjectFileName(name)
+                    val safeName = name.replace(Regex("[^\\p{L}\\p{N} _.-]"), "_").take(60).ifBlank { "project" }
                     val file = File(projectsDirectory(), "$safeName.json")
                     val data = projectValues().put("projectName", name)
                     file.writeText(data.toString(2), Charsets.UTF_8)
@@ -310,125 +327,98 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun listProjectFiles(): List<File> =
-        projectsDirectory().listFiles { file -> file.isFile && file.extension.equals("json", true) }
-            ?.sortedBy { projectDisplayName(it).lowercase(Locale.ROOT) } ?: emptyList()
-
-    private fun projectDisplayName(file: File): String {
-        return try {
-            JSONObject(file.readText(Charsets.UTF_8)).optString("projectName", file.nameWithoutExtension)
-        } catch (_: Exception) {
-            file.nameWithoutExtension
-        }
-    }
-
-    private fun safeProjectFileName(name: String): String =
-        name.replace(Regex("[^\\p{L}\\p{N} _.-]"), "_").take(60).ifBlank { "project" }
-
-    private fun manageProjects() {
-        val files = listProjectFiles()
-        if (files.isEmpty()) {
-            Toast.makeText(this, tr("هنوز پروژه‌ای ذخیره نشده است.", "No saved projects yet."), Toast.LENGTH_SHORT).show()
-            return
-        }
-        val names = files.map { projectDisplayName(it) }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(tr("مدیریت پروژه‌ها", "Manage projects"))
-            .setItems(names) { _, which -> showProjectActions(files[which]) }
-            .setNegativeButton(tr("بستن", "Close"), null)
-            .show()
-    }
-
-    private fun showProjectActions(file: File) {
-        val displayName = projectDisplayName(file)
-        AlertDialog.Builder(this)
-            .setTitle(displayName)
-            .setItems(arrayOf(
-                tr("باز کردن پروژه", "Open project"),
-                tr("تغییر نام", "Rename"),
-                tr("حذف پروژه", "Delete project")
-            )) { _, which ->
-                when (which) {
-                    0 -> loadProject(file)
-                    1 -> renameProject(file)
-                    2 -> confirmDeleteProject(file)
-                }
-            }
-            .setNegativeButton(tr("انصراف", "Cancel"), null)
-            .show()
-    }
-
-    private fun renameProject(file: File) {
-        val nameInput = EditText(this).apply {
-            hint = tr("نام جدید پروژه", "New project name")
-            setSingleLine(true)
-            setTextColor(ink)
-            setText(projectDisplayName(file))
-            setSelection(text.length)
-        }
-        AlertDialog.Builder(this)
-            .setTitle(tr("تغییر نام پروژه", "Rename project"))
-            .setView(nameInput)
-            .setNegativeButton(tr("انصراف", "Cancel"), null)
-            .setPositiveButton(tr("ذخیره نام", "Save name")) { _, _ ->
-                val newName = nameInput.text.toString().trim()
-                if (newName.isBlank()) {
-                    Toast.makeText(this, tr("نام پروژه خالی نباشد.", "Project name cannot be empty."), Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                try {
-                    val safeName = safeProjectFileName(newName)
-                    val target = File(projectsDirectory(), "$safeName.json")
-                    if (target.exists() && target.canonicalPath != file.canonicalPath) {
-                        Toast.makeText(this, tr("پروژه‌ای با این نام وجود دارد.", "A project with this name already exists."), Toast.LENGTH_LONG).show()
-                        return@setPositiveButton
-                    }
-                    val data = JSONObject(file.readText(Charsets.UTF_8))
-                    data.put("projectName", newName)
-                    if (target.canonicalPath == file.canonicalPath) {
-                        file.writeText(data.toString(2), Charsets.UTF_8)
-                    } else {
-                        target.writeText(data.toString(2), Charsets.UTF_8)
-                        if (!file.delete()) {
-                            target.delete()
-                            throw IllegalStateException("Could not remove old project file")
-                        }
-                    }
-                    Toast.makeText(this, tr("نام پروژه تغییر کرد.", "Project renamed."), Toast.LENGTH_SHORT).show()
-                } catch (_: Exception) {
-                    Toast.makeText(this, tr("تغییر نام پروژه انجام نشد.", "Could not rename project."), Toast.LENGTH_LONG).show()
-                }
-            }
-            .show()
-    }
-
-    private fun confirmDeleteProject(file: File) {
-        AlertDialog.Builder(this)
-            .setTitle(tr("حذف پروژه", "Delete project"))
-            .setMessage(tr("پروژه «${projectDisplayName(file)}» حذف شود؟ این کار قابل بازگشت نیست.", "Delete project “${projectDisplayName(file)}”? This cannot be undone."))
-            .setNegativeButton(tr("انصراف", "Cancel"), null)
-            .setPositiveButton(tr("حذف", "Delete")) { _, _ ->
-                if (file.delete()) {
-                    Toast.makeText(this, tr("پروژه حذف شد.", "Project deleted."), Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this, tr("حذف پروژه انجام نشد.", "Could not delete project."), Toast.LENGTH_LONG).show()
-                }
-            }
-            .show()
-    }
-
     private fun chooseProjectToLoad() {
-        val files = listProjectFiles()
+        val files = projectsDirectory().listFiles { file -> file.isFile && file.extension.equals("json", true) }
+            ?.sortedBy { it.name.lowercase(Locale.ROOT) } ?: emptyList()
         if (files.isEmpty()) {
             Toast.makeText(this, tr("هنوز پروژه‌ای ذخیره نشده است.", "No saved projects yet."), Toast.LENGTH_SHORT).show()
             return
         }
-        val names = files.map { projectDisplayName(it) }
+        val names = files.map { file ->
+            try { JSONObject(file.readText(Charsets.UTF_8)).optString("projectName", file.nameWithoutExtension) }
+            catch (_: Exception) { file.nameWithoutExtension }
+        }
         AlertDialog.Builder(this)
             .setTitle(tr("انتخاب پروژه", "Choose a project"))
             .setItems(names.toTypedArray()) { _, which -> loadProject(files[which]) }
             .setNegativeButton(tr("انصراف", "Cancel"), null)
             .show()
+    }
+
+    private fun manageProjectsDialog() {
+        val files = projectsDirectory().listFiles { file -> file.isFile && file.extension.equals("json", true) }
+            ?.sortedBy { it.name.lowercase(Locale.ROOT) } ?: emptyList()
+        if (files.isEmpty()) {
+            Toast.makeText(this, tr("هنوز پروژه‌ای ذخیره نشده است.", "No saved projects yet."), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val names = files.map { file ->
+            try { JSONObject(file.readText(Charsets.UTF_8)).optString("projectName", file.nameWithoutExtension) }
+            catch (_: Exception) { file.nameWithoutExtension }
+        }
+        AlertDialog.Builder(this)
+            .setTitle(tr("مدیریت پروژه‌ها", "Manage projects"))
+            .setItems(names.toTypedArray()) { _, which -> projectActions(files[which], names[which]) }
+            .setNegativeButton(tr("بستن", "Close"), null)
+            .show()
+    }
+
+    private fun projectActions(file: File, currentName: String) {
+        AlertDialog.Builder(this)
+            .setTitle(currentName)
+            .setItems(arrayOf(tr("باز کردن پروژه", "Open project"), tr("تغییر نام", "Rename"), tr("حذف پروژه", "Delete project"))) { _, which ->
+                when (which) {
+                    0 -> loadProject(file)
+                    1 -> renameProject(file, currentName)
+                    2 -> AlertDialog.Builder(this)
+                        .setTitle(tr("حذف پروژه", "Delete project"))
+                        .setMessage(tr("پروژه «$currentName» حذف شود؟", "Delete project “$currentName”?"))
+                        .setNegativeButton(tr("انصراف", "Cancel"), null)
+                        .setPositiveButton(tr("حذف", "Delete")) { _, _ ->
+                            if (file.delete()) Toast.makeText(this, tr("پروژه حذف شد.", "Project deleted."), Toast.LENGTH_SHORT).show()
+                            else Toast.makeText(this, tr("حذف پروژه انجام نشد.", "Could not delete project."), Toast.LENGTH_LONG).show()
+                        }.show()
+                }
+            }
+            .setNegativeButton(tr("انصراف", "Cancel"), null)
+            .show()
+    }
+
+    private fun renameProject(file: File, currentName: String) {
+        val input = EditText(this).apply {
+            setText(currentName)
+            setTextColor(ink)
+            setHintTextColor(muted)
+            setSingleLine(true)
+            background = rounded(fieldFill, 12, Color.rgb(56, 73, 98), 1)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        AlertDialog.Builder(this)
+            .setTitle(tr("تغییر نام پروژه", "Rename project"))
+            .setView(input)
+            .setNegativeButton(tr("انصراف", "Cancel"), null)
+            .setPositiveButton(tr("ذخیره", "Save")) { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isBlank()) {
+                    Toast.makeText(this, tr("نام پروژه را وارد کنید.", "Enter a project name."), Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                try {
+                    val safeName = newName.replace(Regex("[^\\p{L}\\p{N} _.-]"), "_").take(60).ifBlank { "project" }
+                    val target = File(projectsDirectory(), "$safeName.json")
+                    if (target.exists() && target.canonicalFile != file.canonicalFile) {
+                        Toast.makeText(this, tr("پروژه‌ای با این نام وجود دارد.", "A project with this name already exists."), Toast.LENGTH_LONG).show()
+                        return@setPositiveButton
+                    }
+                    val data = JSONObject(file.readText(Charsets.UTF_8)).put("projectName", newName)
+                    val destination = if (target.canonicalFile == file.canonicalFile) file else target
+                    destination.writeText(data.toString(2), Charsets.UTF_8)
+                    if (destination != file) file.delete()
+                    Toast.makeText(this, tr("نام پروژه تغییر کرد.", "Project renamed."), Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) {
+                    Toast.makeText(this, tr("تغییر نام انجام نشد.", "Could not rename project."), Toast.LENGTH_LONG).show()
+                }
+            }.show()
     }
 
     private fun loadProject(file: File) {
