@@ -201,7 +201,7 @@ internal fun MainActivity.buildScreen() {
 
         val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
         cabinetSpinner = Spinner(this).apply {
-            val cabinetTypes = if (english) arrayOf("Base cabinet", "Wall cabinet") else arrayOf("کابینت زمینی", "کابینت دیواری")
+            val cabinetTypes = if (english) arrayOf("Independent cutting", "Base cabinet", "Wall cabinet") else arrayOf("برش مستقل", "کابینت زمینی", "کابینت دیواری")
             adapter = object : ArrayAdapter<String>(this@buildScreen, android.R.layout.simple_spinner_item, cabinetTypes) {
                 override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                     return (super.getView(position, convertView, parent) as TextView).apply {
@@ -219,13 +219,23 @@ internal fun MainActivity.buildScreen() {
                     }
                 }
             }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-            setSelection(prefs().getInt("cabinetType", 0).coerceIn(0, 1))
+            setSelection((prefs().getInt("cabinetType", 0) + 1).coerceIn(1, 2))
             background = rounded(Color.rgb(12, 37, 63), 12, Color.rgb(39, 105, 159), 1)
             setPadding(dp(8), dp(4), dp(8), dp(4))
             dropDownVerticalOffset = dp(4)
             dropDownWidth = ViewGroup.LayoutParams.MATCH_PARENT
         }
         addTo(cabinetCard, cabinetSpinner, 8)
+        cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position == 0 && ::customPartsSection.isInitialized) {
+                    customPartsSection.visibility = View.VISIBLE
+                    if (::customPartModeSpinner.isInitialized) customPartModeSpinner.setSelection(0)
+                    updateCustomPartsToggleLabel()
+                }
+            }
+        }
         widthInput = field("عرض کابینت", "Cabinet width", "width", "۸۰۰")
         heightInput = field("ارتفاع کابینت", "Cabinet height", "height", "۷۲۰")
         depthInput = field("عمق کابینت", "Cabinet depth", "depth", "۵۶۰")
@@ -264,7 +274,7 @@ internal fun MainActivity.buildScreen() {
                 val idx = orderCabinets.size + 1
                 val spec = CabinetSpec(
                     id = "cabinet_$idx", name = if (english) "Cabinet $idx" else "کابینت ${faDigits(idx.toString())}",
-                    cabinetType = if (cabinetSpinner.selectedItemPosition == 0) CabinetType.BASE else CabinetType.WALL,
+                    cabinetType = if (cabinetSpinner.selectedItemPosition == 2) CabinetType.WALL else CabinetType.BASE,
                     widthMm = cw, heightMm = ch, depthMm = cd, boardThicknessMm = ct,
                     shelfCount = cs, doorCount = cdoors, quantity = cq, plinthMm = cp,
                     includeBack = includeBackCheck.isChecked, backThicknessMm = cb, stockType = "MDF", grainSensitive = true
