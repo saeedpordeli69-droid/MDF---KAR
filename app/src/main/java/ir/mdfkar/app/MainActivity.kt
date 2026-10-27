@@ -31,6 +31,16 @@ import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
+private data class CustomOrderPart(
+    val name: String,
+    val lengthMm: Double,
+    val widthMm: Double,
+    val quantity: Int,
+    val thicknessMm: Double,
+    val linkedCabinetId: String? = null,
+    val referenceDimension: Int = -1
+)
+
 class MainActivity : Activity() {
 
     // Visual tokens live in AppTheme.kt so future appearance changes stay separate.
@@ -82,7 +92,17 @@ class MainActivity : Activity() {
     private var latestSheetCount = 0
     private var selectedSheetIndex = 0
     private val orderCabinets = mutableListOf<CabinetSpec>()
+    private val customParts = mutableListOf<CustomOrderPart>()
     private lateinit var orderListView: LinearLayout
+    private lateinit var customPartsListView: LinearLayout
+    private lateinit var customPartNameInput: EditText
+    private lateinit var customPartLengthInput: EditText
+    private lateinit var customPartWidthInput: EditText
+    private lateinit var customPartQtyInput: EditText
+    private lateinit var customPartThicknessInput: EditText
+    private lateinit var customPartModeSpinner: Spinner
+    private lateinit var customPartCabinetSpinner: Spinner
+    private lateinit var customPartDimensionSpinner: Spinner
 
     
     
@@ -445,6 +465,58 @@ class MainActivity : Activity() {
             Toast.makeText(this, tr("سفارش پاک شد؛ محاسبه دوباره از مشخصات فعلی انجام می‌شود.", "Order cleared; calculation will use current dimensions."), Toast.LENGTH_SHORT).show()
         }, 8)
 
+        addTo(cabinetCard, label("قطعات سفارشی سفارش", "Custom order parts", 15f), 4)
+        addTo(cabinetCard, TextView(this).apply {
+            text = tr("قطعهٔ مستقل مثل جداکنندهٔ ۱۰×۱۸۰، یا قطعه‌ای وابسته به ابعاد یک کابینت مثل لبهٔ جلوی طبقه.", "Add a standalone part (e.g. 100×1800 divider) or a part linked to a cabinet dimension.")
+            textSize = 11f; setTextColor(muted); setPadding(0, 0, 0, dp(7))
+        }, 4)
+        customPartNameInput = field("نام قطعه", "Part name", "customPartName", "لبه جلوی طبقه")
+        customPartLengthInput = field("طول (mm)", "Length (mm)", "customPartLength", "۸۰۰")
+        customPartWidthInput = field("عرض (mm)", "Width (mm)", "customPartWidth", "۵۰")
+        customPartQtyInput = field("تعداد", "Quantity", "customPartQty", "۴")
+        customPartThicknessInput = field("ضخامت ورق (mm)", "Board thickness (mm)", "customPartThickness", "۱۶")
+        pairedRow(cabinetCard, fieldCell("نام قطعه", "Part name", customPartNameInput), fieldCell("تعداد", "Quantity", customPartQtyInput))
+        pairedRow(cabinetCard, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
+        addTo(cabinetCard, fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput), 6)
+        customPartModeSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                if (english) listOf("Standalone part", "Linked to cabinet") else listOf("قطعه مستقل", "وابسته به کابینت"))
+        }
+        addTo(cabinetCard, label("نوع قطعه", "Part type", 12f), 2)
+        addTo(cabinetCard, customPartModeSpinner, 5)
+        customPartCabinetSpinner = Spinner(this)
+        customPartDimensionSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                if (english) listOf("Use cabinet width", "Use cabinet height", "Use cabinet depth") else listOf("طول برابر عرض کابینت", "طول برابر ارتفاع کابینت", "طول برابر عمق کابینت"))
+        }
+        addTo(cabinetCard, label("برای قطعه وابسته: کابینت و بُعد مرجع", "For linked part: cabinet and reference dimension", 12f), 2)
+        addTo(cabinetCard, customPartCabinetSpinner, 3)
+        addTo(cabinetCard, customPartDimensionSpinner, 6)
+        customPartsListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        addTo(cabinetCard, customPartsListView, 5)
+        addTo(cabinetCard, button("＋ افزودن قطعه سفارشی", "+ Add custom part") {
+            val name = customPartNameInput.text.toString().trim()
+            val length = number(customPartLengthInput.text.toString())
+            val width = number(customPartWidthInput.text.toString())
+            val qty = number(customPartQtyInput.text.toString())?.toInt()
+            val thickness = number(customPartThicknessInput.text.toString())
+            val linked = customPartModeSpinner.selectedItemPosition == 1
+            val cabinetIndex = customPartCabinetSpinner.selectedItemPosition
+            if (name.isBlank() || length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0 || (linked && cabinetIndex !in orderCabinets.indices)) {
+                Toast.makeText(this, tr("نام، ابعاد، ضخامت و تعداد را بررسی کنید. برای قطعه وابسته ابتدا کابینت را به سفارش اضافه کنید.", "Check name, dimensions, thickness and quantity. Add a cabinet before linking a part."), Toast.LENGTH_LONG).show()
+            } else {
+                val linkedCabinet = if (linked) orderCabinets[cabinetIndex] else null
+                val dimension = if (linked) customPartDimensionSpinner.selectedItemPosition else -1
+                customParts += CustomOrderPart(name, length, width, qty, thickness, linkedCabinet?.id, dimension)
+                refreshCustomPartsList()
+                Toast.makeText(this, tr("قطعه به سفارش اضافه شد.", "Custom part added to order."), Toast.LENGTH_SHORT).show()
+            }
+        }, 7)
+        addTo(cabinetCard, button("پاک کردن قطعات سفارشی", "Clear custom parts") {
+            customParts.clear(); refreshCustomPartsList()
+            Toast.makeText(this, tr("قطعات سفارشی پاک شدند.", "Custom parts cleared."), Toast.LENGTH_SHORT).show()
+        }, 8)
+
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
             calculate()
@@ -615,6 +687,8 @@ class MainActivity : Activity() {
         navItem("▣", "پروژه‌ها", "Projects", 2)
         navItem("⚙", "تنظیمات", "Settings", 3)
         root.addView(nav, LinearLayout.LayoutParams(-1, -2))
+        refreshOrderList()
+        refreshCustomPartsList()
         setContentView(root)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT_WATCH) {
             root.setOnApplyWindowInsetsListener { view, insets ->
@@ -876,7 +950,7 @@ class MainActivity : Activity() {
     }
 
     private fun calculate() {
-        if (orderCabinets.isNotEmpty()) {
+        if (orderCabinets.isNotEmpty() || customParts.isNotEmpty()) {
             calculateMultiCabinetOrder()
             return
         }
@@ -1034,6 +1108,10 @@ class MainActivity : Activity() {
 
     private fun refreshOrderList() {
         if (!::orderListView.isInitialized) return
+        if (::customPartCabinetSpinner.isInitialized) {
+            customPartCabinetSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+                if (orderCabinets.isEmpty()) listOf(tr("ابتدا کابینت اضافه کنید", "Add a cabinet first")) else orderCabinets.map { it.name })
+        }
         orderListView.removeAllViews()
         if (orderCabinets.isEmpty()) {
             orderListView.addView(TextView(this).apply {
@@ -1062,6 +1140,36 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun refreshCustomPartsList() {
+        if (!::customPartsListView.isInitialized) return
+        customPartsListView.removeAllViews()
+        if (customParts.isEmpty()) {
+            customPartsListView.addView(TextView(this).apply {
+                text = tr("هنوز قطعه سفارشی اضافه نشده است.", "No custom parts added yet.")
+                textSize = 11f; setTextColor(muted); setPadding(dp(8), dp(5), dp(8), dp(5))
+            })
+            return
+        }
+        customParts.forEachIndexed { index, part ->
+            val linkedName = part.linkedCabinetId?.let { id -> orderCabinets.find { it.id == id }?.name }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(9), dp(7), dp(9), dp(7))
+                background = rounded(Color.rgb(22, 48, 63), 10, Color.rgb(45, 125, 145), 1)
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) }
+            }
+            val info = TextView(this).apply {
+                text = "${part.name} • ${fmt(part.lengthMm)}×${fmt(part.widthMm)} mm • ${tr("تعداد", "qty")} ${part.quantity} • ${fmt(part.thicknessMm)} mm${if (linkedName != null) " • $linkedName" else " • ${tr("مستقل", "standalone")}"}"
+                textSize = 10f; setTextColor(ink); layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            }
+            row.addView(info)
+            row.addView(button("×", "×") {
+                customParts.removeAt(index); refreshCustomPartsList()
+            }.apply { minWidth = dp(40); minHeight = dp(38) })
+            customPartsListView.addView(row)
+        }
+    }
+
     private fun calculateMultiCabinetOrder() {
         val sw = number(sheetWidthInput.text.toString())
         val sh = number(sheetHeightInput.text.toString())
@@ -1071,6 +1179,7 @@ class MainActivity : Activity() {
             return
         }
         val allParts = mutableListOf<CuttingPart>()
+        val partsByStock = linkedMapOf<String, MutableList<CuttingPart>>()
         var backArea = 0.0
         var pvcMeters = 0.0
         orderCabinets.forEach { c ->
@@ -1082,8 +1191,14 @@ class MainActivity : Activity() {
                 resultText.text = tr("ابعاد ${c.name} پس از کسر ضخامت/پاخور معتبر نیست.", "Dimensions for ${c.name} are invalid after subtracting thickness/plinth.")
                 return
             }
+            val stockKey = "${c.stockType}|${c.boardThicknessMm}"
+            val stockParts = partsByStock.getOrPut(stockKey) { mutableListOf() }
             fun part(labelFa: String, labelEn: String, w: Double, h: Double, qty: Int, rotate: Boolean = false) {
-                if (qty > 0 && w > 0 && h > 0) allParts += CuttingPart("${c.name} - ${tr(labelFa, labelEn)}", w, h, qty * c.quantity, rotate)
+                if (qty > 0 && w > 0 && h > 0) {
+                    val item = CuttingPart("${c.name} - ${tr(labelFa, labelEn)}", w, h, qty * c.quantity, rotate)
+                    allParts += item
+                    stockParts += item
+                }
             }
             part("پهلو", "Side", c.depthMm, bodyH, 2)
             part("کف", "Bottom", innerW, c.depthMm, 1)
@@ -1099,13 +1214,24 @@ class MainActivity : Activity() {
             if (sidePvcCheck.isChecked) pvcMeters += c.quantity * 2 * bodyH / 1000.0
             if (shelfPvcCheck.isChecked) pvcMeters += c.quantity * (1 + c.shelfCount) * innerW / 1000.0
         }
-        // Different thicknesses/stock types are packed separately; sheet indexes are then combined for navigation.
-        val grouped = orderCabinets.groupBy { "${it.stockType}|${it.boardThicknessMm}" }
+        // Add standalone or cabinet-linked custom parts to the matching stock/thickness group.
+        customParts.forEach { custom ->
+            val cabinet = custom.linkedCabinetId?.let { id -> orderCabinets.find { it.id == id } }
+            val referenceLength = if (cabinet == null || custom.referenceDimension < 0) custom.lengthMm else when (custom.referenceDimension) {
+                0 -> cabinet.widthMm
+                1 -> cabinet.heightMm
+                else -> cabinet.depthMm
+            }
+            val quantity = custom.quantity * (cabinet?.quantity ?: 1)
+            val item = CuttingPart("${custom.name}${cabinet?.let { " - ${it.name}" } ?: " - ${tr("سفارشی", "Custom")}"}", referenceLength, custom.widthMm, quantity, custom.linkedCabinetId == null)
+            allParts += item
+            val stockKey = "MDF|${custom.thicknessMm}"
+            partsByStock.getOrPut(stockKey) { mutableListOf() }.add(item)
+        }
+        // Each material/thickness group is laid out separately.
         val placements = mutableListOf<SheetPlacement>()
         var sheetOffset = 0
-        grouped.values.forEach { group ->
-            val ids = group.map { it.name + " - " }
-            val parts = allParts.filter { p -> ids.any { p.name.startsWith(it) } }
+        partsByStock.values.forEach { parts ->
             if (parts.isNotEmpty()) {
                 val packed = CuttingCalculator.packParts(parts, sw, sh, kerf)
                 placements += packed.placements.map { it.copy(sheet = it.sheet + sheetOffset) }
