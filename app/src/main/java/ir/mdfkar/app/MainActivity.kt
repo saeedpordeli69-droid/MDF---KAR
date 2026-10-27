@@ -78,6 +78,14 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = Color.rgb(3, 13, 27)
+        window.navigationBarColor = Color.rgb(3, 13, 27)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
+        @Suppress("DEPRECATION")
+        run { window.decorView.systemUiVisibility = 0 }
         loadSettings()
         buildScreen()
     }
@@ -117,8 +125,9 @@ class MainActivity : Activity() {
     private fun field(hintFa: String, hintEn: String, key: String, fallback: String): EditText {
         return EditText(this).apply {
             hint = tr(hintFa, hintEn)
-            setText(saved(key, fallback))
+            setText(if (english) saved(key, fallback) else faDigits(saved(key, fallback)))
             textSize = 16f
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
             setSingleLine(true)
             setTextColor(ink)
             setHintTextColor(muted)
@@ -183,7 +192,7 @@ class MainActivity : Activity() {
         fun makePage(): LinearLayout {
             val pageContent = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(16), dp(12), dp(16), dp(18))
+                setPadding(dp(16), dp(12), dp(16), dp(28))
             }
             val scroll = ScrollView(this).apply {
                 clipToPadding = false
@@ -286,10 +295,10 @@ class MainActivity : Activity() {
         // HOME: only the inputs needed to describe a cabinet. Results and advanced options are separate tabs.
         addPageHeading(homePage, "محاسبه کابینت", "Cabinet calculator", "ابعاد را وارد کنید و نتیجه برش را جداگانه ببینید", "Enter dimensions; view the cutting plan on its own screen")
         val sheetCard = addSection(homePage, "ابعاد ورق MDF", "MDF sheet dimensions", "همه اندازه‌ها بر حسب میلی‌متر", "All measurements in millimeters")
-        sheetWidthInput = field("عرض ورق", "Sheet width", "sheetWidth", "2070")
-        sheetHeightInput = field("طول ورق", "Sheet length", "sheetHeight", "2800")
+        sheetWidthInput = field("عرض ورق", "Sheet width", "sheetWidth", "۲۰۷۰")
+        sheetHeightInput = field("طول ورق", "Sheet length", "sheetHeight", "۲۸۰۰")
         pairedRow(sheetCard, fieldCell("عرض ورق", "Sheet width", sheetWidthInput), fieldCell("طول ورق", "Sheet length", sheetHeightInput))
-        kerfInput = field("عرض تیغه", "Saw kerf", "kerf", "3")
+        kerfInput = field("عرض تیغه", "Saw kerf", "kerf", "۳")
         addTo(sheetCard, label("ضخامت تیغه برش (میلی‌متر)", "Saw kerf (mm)", 12f))
         addTo(sheetCard, kerfInput, 1)
 
@@ -302,14 +311,14 @@ class MainActivity : Activity() {
             setPadding(dp(8), dp(4), dp(8), dp(4))
         }
         addTo(cabinetCard, cabinetSpinner, 8)
-        widthInput = field("عرض کابینت", "Cabinet width", "width", "800")
-        heightInput = field("ارتفاع کابینت", "Cabinet height", "height", "720")
-        depthInput = field("عمق کابینت", "Cabinet depth", "depth", "560")
-        thicknessInput = field("ضخامت ورق", "Board thickness", "thickness", "16")
-        shelfInput = field("تعداد طبقه", "Shelves", "shelves", "1")
-        doorInput = field("تعداد در", "Doors", "doors", "2")
-        plinthInput = field("ارتفاع پاخور", "Plinth height", "plinth", "100")
-        backThicknessInput = field("ضخامت پشت‌بند", "Back panel thickness", "backThickness", "3")
+        widthInput = field("عرض کابینت", "Cabinet width", "width", "۸۰۰")
+        heightInput = field("ارتفاع کابینت", "Cabinet height", "height", "۷۲۰")
+        depthInput = field("عمق کابینت", "Cabinet depth", "depth", "۵۶۰")
+        thicknessInput = field("ضخامت ورق", "Board thickness", "thickness", "۱۶")
+        shelfInput = field("تعداد طبقه", "Shelves", "shelves", "۱")
+        doorInput = field("تعداد در", "Doors", "doors", "۲")
+        plinthInput = field("ارتفاع پاخور", "Plinth height", "plinth", "۱۰۰")
+        backThicknessInput = field("ضخامت پشت‌بند", "Back panel thickness", "backThickness", "۳")
         pairedRow(cabinetCard, fieldCell("عرض کابینت (mm)", "Cabinet width (mm)", widthInput), fieldCell("ارتفاع کابینت (mm)", "Cabinet height (mm)", heightInput))
         pairedRow(cabinetCard, fieldCell("عمق کابینت (mm)", "Cabinet depth (mm)", depthInput), fieldCell("ضخامت ورق بدنه", "Carcass thickness", thicknessInput))
         pairedRow(cabinetCard, fieldCell("تعداد طبقه", "Shelves", shelfInput), fieldCell("تعداد در (۰ تا ۲)", "Doors (0–2)", doorInput))
