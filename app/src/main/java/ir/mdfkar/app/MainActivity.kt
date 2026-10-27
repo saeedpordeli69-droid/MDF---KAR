@@ -11,6 +11,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.MotionEvent
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -75,14 +76,14 @@ class MainActivity : Activity() {
     private lateinit var sidePvcCheck: CheckBox
     private lateinit var shelfPvcCheck: CheckBox
 
-    private var latestPlacements: List<Placement> = emptyList()
+    private var latestPlacements: List<SheetPlacement> = emptyList()
     private var latestSheetW = 2800.0
     private var latestSheetH = 2070.0
     private var latestSheetCount = 0
     private var selectedSheetIndex = 0
 
-    data class Part(val name: String, val width: Double, val height: Double, val quantity: Int = 1, val rotate: Boolean = true)
-    data class Placement(val name: String, val x: Double, val y: Double, val width: Double, val height: Double, val rotated: Boolean, val sheet: Int)
+    
+    
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -482,7 +483,12 @@ class MainActivity : Activity() {
         sheetNavigation.addView(previousSheetButton, LinearLayout.LayoutParams(0, dp(42), 1f))
         sheetNavigation.addView(sheetCounterLabel, LinearLayout.LayoutParams(0, dp(42), 1f))
         sheetNavigation.addView(nextSheetButton, LinearLayout.LayoutParams(0, dp(42), 1f))
-        layoutCard.addView(sheetNavigation, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        layoutCard.addView(sheetNavigation, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(2) })
+        layoutCard.addView(TextView(this).apply {
+            text = tr("برای جابه‌جایی بین ورق‌ها، روی نقشه به چپ یا راست بکشید.", "Swipe left or right on the sheet to navigate.")
+            textSize = 11f; setTextColor(muted); gravity = Gravity.CENTER
+            setPadding(0, dp(2), 0, dp(7))
+        }, LinearLayout.LayoutParams(-1, -2))
         layoutView = SheetLayoutView().apply { background = rounded(Color.rgb(4, 19, 34), 14, AppTheme.CARD_BORDER, 1) }
         layoutCard.addView(layoutView, LinearLayout.LayoutParams(-1, dp(270)))
         updateSheetNavigation()
@@ -866,28 +872,28 @@ class MainActivity : Activity() {
             return
         }
 
-        val parts = mutableListOf<Part>()
-        parts += Part(tr("پهلو", "Side"), d, bodyH, 2)
-        parts += Part(tr("کف", "Bottom"), innerW, d)
-        if (shelves > 0) parts += Part(tr("طبقه", "Shelf"), innerW, d, shelves)
+        val parts = mutableListOf<CuttingPart>()
+        parts += CuttingPart(tr("پهلو", "Side"), d, bodyH, 2)
+        parts += CuttingPart(tr("کف", "Bottom"), innerW, d)
+        if (shelves > 0) parts += CuttingPart(tr("طبقه", "Shelf"), innerW, d, shelves)
         if (isBase) {
-            parts += Part(tr("ریل بالا", "Top rail"), max(100.0, innerW / 8), t, 2)
+            parts += CuttingPart(tr("ریل بالا", "Top rail"), max(100.0, innerW / 8), t, 2)
         } else {
-            parts += Part(tr("بالا", "Top"), innerW, d)
+            parts += CuttingPart(tr("بالا", "Top"), innerW, d)
         }
 
         if (includeBackCheck.isChecked) {
-            parts += Part(tr("پشت‌بند", "Back panel"), w, bodyH, 1, false)
+            parts += CuttingPart(tr("پشت‌بند", "Back panel"), w, bodyH, 1, false)
         }
         if (doors > 0) {
             val doorW = (w - 3.0) / doors
             val doorH = bodyH - 3.0
-            if (doorW > 0 && doorH > 0) parts += Part(tr("درب", "Door"), doorW, doorH, doors)
+            if (doorW > 0 && doorH > 0) parts += CuttingPart(tr("درب", "Door"), doorW, doorH, doors)
         }
 
         val multipliedParts = parts.map { it.copy(quantity = it.quantity * cabinetQuantity) }
         val boardParts = multipliedParts.filter { it.name != tr("پشت‌بند", "Back panel") }
-        val layout = packParts(boardParts, sw, sh, kerf)
+        val layout = CuttingCalculator.packParts(boardParts, sw, sh, kerf)
         latestPlacements = layout.placements
         latestSheetW = sw
         latestSheetH = sh
@@ -983,77 +989,6 @@ class MainActivity : Activity() {
         saveSettings()
     }
 
-    private data class PackResult(val placements: List<Placement>, val sheetCount: Int)
-
-    /*
-     * Shelf/row heuristic: sort largest pieces first, place each in an existing row
-     * if possible (including rotation), otherwise create a new row or new sheet.
-     * Kerf is added between adjacent pieces and rows. This is a planning estimate,
-     * not a certified guillotine/CNC optimizer.
-     */
-    private fun packParts(parts: List<Part>, sheetW: Double, sheetH: Double, kerf: Double): PackResult {
-        val expanded = mutableListOf<Part>()
-        parts.forEach { p ->
-            repeat(p.quantity) { expanded += p.copy(quantity = 1) }
-        }
-        val sorted = expanded.sortedByDescending { max(it.width, it.height) * min(it.width, it.height) }
-        data class Row(var y: Double, var height: Double, var x: Double)
-        val rowsBySheet = mutableListOf<MutableList<Row>>()
-        val placements = mutableListOf<Placement>()
-
-        for (part in sorted) {
-            var placed = false
-            for (sheetIndex in rowsBySheet.indices) {
-                val rows = rowsBySheet[sheetIndex]
-                for (row in rows) {
-                    val remaining = sheetW - row.x
-                    val options = mutableListOf<Triple<Double, Double, Boolean>>()
-                    if (part.width <= remaining && part.height <= row.height) options += Triple(part.width, part.height, false)
-                    if (part.rotate && part.height <= remaining && part.width <= row.height) options += Triple(part.height, part.width, true)
-                    val choice = options.minByOrNull { it.first * it.second }
-                    if (choice != null) {
-                        placements += Placement(part.name, row.x, row.y, choice.first, choice.second, choice.third, sheetIndex)
-                        row.x += choice.first + kerf
-                        placed = true
-                        break
-                    }
-                }
-                if (placed) break
-
-                val nextY = if (rows.isEmpty()) 0.0 else rows.maxOf { it.y + it.height } + kerf
-                val orientations = mutableListOf<Triple<Double, Double, Boolean>>()
-                if (part.width <= sheetW && part.height <= sheetH - nextY) orientations += Triple(part.width, part.height, false)
-                if (part.rotate && part.height <= sheetW && part.width <= sheetH - nextY) orientations += Triple(part.height, part.width, true)
-                val choice = orientations.minByOrNull { it.second }
-                if (choice != null) {
-                    rows += Row(nextY, choice.second, choice.first + kerf)
-                    placements += Placement(part.name, 0.0, nextY, choice.first, choice.second, choice.third, sheetIndex)
-                    placed = true
-                    break
-                }
-            }
-
-            if (!placed) {
-                val orientations = mutableListOf<Triple<Double, Double, Boolean>>()
-                if (part.width <= sheetW && part.height <= sheetH) orientations += Triple(part.width, part.height, false)
-                if (part.rotate && part.height <= sheetW && part.width <= sheetH) orientations += Triple(part.height, part.width, true)
-                val choice = orientations.minByOrNull { it.second }
-                if (choice != null) {
-                    val newIndex = rowsBySheet.size
-                    val row = Row(0.0, choice.second, choice.first + kerf)
-                    rowsBySheet += mutableListOf(row)
-                    placements += Placement(part.name, 0.0, 0.0, choice.first, choice.second, choice.third, newIndex)
-                } else {
-                    // Keep the piece visible as an overflow placement; the output warns by dimensions.
-                    val newIndex = rowsBySheet.size
-                    rowsBySheet += mutableListOf(Row(0.0, min(part.height, sheetH), min(part.width, sheetW)))
-                    placements += Placement(part.name, 0.0, 0.0, part.width, part.height, false, newIndex)
-                }
-            }
-        }
-        return PackResult(placements, rowsBySheet.size)
-    }
-
     private fun updateSheetNavigation() {
         if (!::sheetCounterLabel.isInitialized) return
         val total = latestSheetCount
@@ -1066,6 +1001,7 @@ class MainActivity : Activity() {
     }
 
     private inner class SheetLayoutView : View(this@MainActivity) {
+        private var downX = 0f
         private val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = AppTheme.ACCENT
             style = Paint.Style.STROKE
@@ -1076,6 +1012,30 @@ class MainActivity : Activity() {
             color = AppTheme.TEXT
             textSize = dp(10).toFloat()
             textAlign = Paint.Align.CENTER
+        }
+
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> { downX = event.x; return true }
+                MotionEvent.ACTION_UP -> {
+                    val delta = event.x - downX
+                    if (kotlin.math.abs(delta) > dp(45) && latestSheetCount > 1) {
+                        // Swipe left shows the next sheet; swipe right shows the previous one.
+                        if (delta < 0 && selectedSheetIndex < latestSheetCount - 1) selectedSheetIndex++
+                        else if (delta > 0 && selectedSheetIndex > 0) selectedSheetIndex--
+                        updateSheetNavigation()
+                        invalidate()
+                    }
+                    performClick()
+                    return true
+                }
+            }
+            return true
+        }
+
+        override fun performClick(): Boolean {
+            super.performClick()
+            return true
         }
 
         override fun onDraw(canvas: Canvas) {
