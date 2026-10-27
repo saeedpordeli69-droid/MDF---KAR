@@ -229,10 +229,14 @@ internal fun MainActivity.buildScreen() {
         cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (position == 0 && ::customPartsSection.isInitialized) {
-                    customPartsSection.visibility = View.VISIBLE
-                    if (::customPartModeSpinner.isInitialized) customPartModeSpinner.setSelection(0)
-                    updateCustomPartsToggleLabel()
+                if (position == 0) {
+                    // These views are created later in buildScreen(); the spinner callback
+                    // can fire before their lateinit properties have been initialized.
+                    runCatching {
+                        customPartsSection.visibility = View.VISIBLE
+                        customPartModeSpinner.setSelection(0)
+                        updateCustomPartsToggleLabel()
+                    }
                 }
             }
         }
