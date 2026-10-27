@@ -95,6 +95,8 @@ class MainActivity : Activity() {
     private val customParts = mutableListOf<CustomOrderPart>()
     private lateinit var orderListView: LinearLayout
     private lateinit var customPartsListView: LinearLayout
+    private lateinit var customPartsSection: LinearLayout
+    private lateinit var customPartsToggleButton: TextView
     private lateinit var customPartNameInput: EditText
     private lateinit var customPartLengthInput: EditText
     private lateinit var customPartWidthInput: EditText
@@ -465,36 +467,48 @@ class MainActivity : Activity() {
             Toast.makeText(this, tr("سفارش پاک شد؛ محاسبه دوباره از مشخصات فعلی انجام می‌شود.", "Order cleared; calculation will use current dimensions."), Toast.LENGTH_SHORT).show()
         }, 8)
 
-        addTo(cabinetCard, label("قطعات سفارشی سفارش", "Custom order parts", 15f), 4)
-        addTo(cabinetCard, TextView(this).apply {
-            text = tr("قطعهٔ مستقل مثل جداکنندهٔ ۱۰×۱۸۰، یا قطعه‌ای وابسته به ابعاد یک کابینت مثل لبهٔ جلوی طبقه.", "Add a standalone part (e.g. 100×1800 divider) or a part linked to a cabinet dimension.")
-            textSize = 11f; setTextColor(muted); setPadding(0, 0, 0, dp(7))
-        }, 4)
+        customPartsToggleButton = button("＋ قطعات سفارشی (۰)", "+ Custom parts (0)") {
+            customPartsSection.visibility = if (customPartsSection.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            updateCustomPartsToggleLabel()
+        }.apply {
+            minHeight = dp(44)
+            textSize = 13f
+        }
+        addTo(cabinetCard, customPartsToggleButton, 7)
+        customPartsSection = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        addTo(cabinetCard, customPartsSection, 2)
+        addTo(customPartsSection, TextView(this).apply {
+            text = tr("قطعهٔ مستقل یا وابسته به ابعاد کابینت اضافه کنید.", "Add a standalone part or one linked to cabinet dimensions.")
+            textSize = 11f; setTextColor(muted); setPadding(0, 0, 0, dp(5))
+        }, 3)
         customPartNameInput = field("نام قطعه", "Part name", "customPartName", "لبه جلوی طبقه")
         customPartLengthInput = field("طول (mm)", "Length (mm)", "customPartLength", "۸۰۰")
         customPartWidthInput = field("عرض (mm)", "Width (mm)", "customPartWidth", "۵۰")
         customPartQtyInput = field("تعداد", "Quantity", "customPartQty", "۴")
         customPartThicknessInput = field("ضخامت ورق (mm)", "Board thickness (mm)", "customPartThickness", "۱۶")
-        pairedRow(cabinetCard, fieldCell("نام قطعه", "Part name", customPartNameInput), fieldCell("تعداد", "Quantity", customPartQtyInput))
-        pairedRow(cabinetCard, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
-        addTo(cabinetCard, fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput), 6)
+        pairedRow(customPartsSection, fieldCell("نام قطعه", "Part name", customPartNameInput), fieldCell("تعداد", "Quantity", customPartQtyInput))
+        pairedRow(customPartsSection, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
+        addTo(customPartsSection, fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput), 6)
         customPartModeSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
                 if (english) listOf("Standalone part", "Linked to cabinet") else listOf("قطعه مستقل", "وابسته به کابینت"))
         }
-        addTo(cabinetCard, label("نوع قطعه", "Part type", 12f), 2)
-        addTo(cabinetCard, customPartModeSpinner, 5)
+        addTo(customPartsSection, label("نوع قطعه", "Part type", 12f), 2)
+        addTo(customPartsSection, customPartModeSpinner, 5)
         customPartCabinetSpinner = Spinner(this)
         customPartDimensionSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
                 if (english) listOf("Use cabinet width", "Use cabinet height", "Use cabinet depth") else listOf("طول برابر عرض کابینت", "طول برابر ارتفاع کابینت", "طول برابر عمق کابینت"))
         }
-        addTo(cabinetCard, label("برای قطعه وابسته: کابینت و بُعد مرجع", "For linked part: cabinet and reference dimension", 12f), 2)
-        addTo(cabinetCard, customPartCabinetSpinner, 3)
-        addTo(cabinetCard, customPartDimensionSpinner, 6)
+        addTo(customPartsSection, label("برای قطعه وابسته: کابینت و بُعد مرجع", "For linked part: cabinet and reference dimension", 12f), 2)
+        addTo(customPartsSection, customPartCabinetSpinner, 3)
+        addTo(customPartsSection, customPartDimensionSpinner, 6)
         customPartsListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        addTo(cabinetCard, customPartsListView, 5)
-        addTo(cabinetCard, button("＋ افزودن قطعه سفارشی", "+ Add custom part") {
+        addTo(customPartsSection, customPartsListView, 5)
+        addTo(customPartsSection, button("＋ افزودن قطعه سفارشی", "+ Add custom part") {
             val name = customPartNameInput.text.toString().trim()
             val length = number(customPartLengthInput.text.toString())
             val width = number(customPartWidthInput.text.toString())
@@ -512,7 +526,7 @@ class MainActivity : Activity() {
                 Toast.makeText(this, tr("قطعه به سفارش اضافه شد.", "Custom part added to order."), Toast.LENGTH_SHORT).show()
             }
         }, 7)
-        addTo(cabinetCard, button("پاک کردن قطعات سفارشی", "Clear custom parts") {
+        addTo(customPartsSection, button("پاک کردن قطعات سفارشی", "Clear custom parts") {
             customParts.clear(); refreshCustomPartsList()
             Toast.makeText(this, tr("قطعات سفارشی پاک شدند.", "Custom parts cleared."), Toast.LENGTH_SHORT).show()
         }, 8)
@@ -1143,6 +1157,7 @@ class MainActivity : Activity() {
     private fun refreshCustomPartsList() {
         if (!::customPartsListView.isInitialized) return
         customPartsListView.removeAllViews()
+        updateCustomPartsToggleLabel()
         if (customParts.isEmpty()) {
             customPartsListView.addView(TextView(this).apply {
                 text = tr("هنوز قطعه سفارشی اضافه نشده است.", "No custom parts added yet.")
@@ -1168,6 +1183,13 @@ class MainActivity : Activity() {
             }.apply { minWidth = dp(40); minHeight = dp(38) })
             customPartsListView.addView(row)
         }
+    }
+
+    private fun updateCustomPartsToggleLabel() {
+        if (!::customPartsToggleButton.isInitialized) return
+        val expanded = ::customPartsSection.isInitialized && customPartsSection.visibility == View.VISIBLE
+        val prefix = if (expanded) "−" else "+"
+        customPartsToggleButton.text = if (english) "$prefix Custom parts (${customParts.size})" else "$prefix قطعات سفارشی (${faDigits(customParts.size.toString())})"
     }
 
     private fun calculateMultiCabinetOrder() {
