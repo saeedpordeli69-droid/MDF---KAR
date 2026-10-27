@@ -105,13 +105,13 @@ internal fun MainActivity.buildScreen() {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
             addView(label(labelFa, labelEn, 12f))
-            val stepper = LinearLayout(this@MainActivity).apply {
+            val stepper = LinearLayout(this@buildScreen).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 background = rounded(Color.rgb(10, 31, 53), 13, Color.rgb(43, 102, 153), 1)
                 setPadding(dp(4), dp(2), dp(4), dp(2))
             }
-            fun stepButton(symbol: String, delta: Double): TextView = TextView(this@MainActivity).apply {
+            fun stepButton(symbol: String, delta: Double): TextView = TextView(this@buildScreen).apply {
                 text = symbol
                 textSize = 19f
                 gravity = Gravity.CENTER
@@ -144,20 +144,20 @@ internal fun MainActivity.buildScreen() {
             val header = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(16), dp(12), dp(16), dp(12))
-                background = AppTheme.heroBackground(this@MainActivity)
+                background = AppTheme.heroBackground(this@buildScreen)
                 elevation = dp(3).toFloat()
             }
             header.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                val mark = TextView(this@MainActivity).apply {
+                val mark = TextView(this@buildScreen).apply {
                     text = "▰"
                     textSize = 25f
                     setTextColor(AppTheme.ACCENT)
                     setPadding(0, 0, dp(7), 0)
                 }
                 addView(mark)
-                val brand = TextView(this@MainActivity).apply {
+                val brand = TextView(this@buildScreen).apply {
                     text = android.text.SpannableString("MDF-KAR").apply {
                         setSpan(android.text.style.ForegroundColorSpan(Color.WHITE), 0, 3, 0)
                         setSpan(android.text.style.ForegroundColorSpan(AppTheme.ACCENT), 4, 7, 0)
@@ -202,7 +202,7 @@ internal fun MainActivity.buildScreen() {
         val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
         cabinetSpinner = Spinner(this).apply {
             val cabinetTypes = if (english) arrayOf("Base cabinet", "Wall cabinet") else arrayOf("کابینت زمینی", "کابینت دیواری")
-            adapter = object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_spinner_item, cabinetTypes) {
+            adapter = object : ArrayAdapter<String>(this@buildScreen, android.R.layout.simple_spinner_item, cabinetTypes) {
                 override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                     return (super.getView(position, convertView, parent) as TextView).apply {
                         setTextColor(AppTheme.TEXT)
@@ -305,14 +305,14 @@ internal fun MainActivity.buildScreen() {
         pairedRow(customPartsSection, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
         addTo(customPartsSection, fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput), 6)
         customPartModeSpinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+            adapter = ArrayAdapter(this@buildScreen, android.R.layout.simple_spinner_dropdown_item,
                 if (english) listOf("Standalone part", "Linked to cabinet") else listOf("قطعه مستقل", "وابسته به کابینت"))
         }
         addTo(customPartsSection, label("نوع قطعه", "Part type", 12f), 2)
         addTo(customPartsSection, customPartModeSpinner, 5)
         customPartCabinetSpinner = Spinner(this)
         customPartDimensionSpinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+            adapter = ArrayAdapter(this@buildScreen, android.R.layout.simple_spinner_dropdown_item,
                 if (english) listOf("Use cabinet width", "Use cabinet height", "Use cabinet depth") else listOf("طول برابر عرض کابینت", "طول برابر ارتفاع کابینت", "طول برابر عمق کابینت"))
         }
         addTo(customPartsSection, label("برای قطعه وابسته: کابینت و بُعد مرجع", "For linked part: cabinet and reference dimension", 12f), 2)
@@ -350,7 +350,7 @@ internal fun MainActivity.buildScreen() {
         }.apply {
             textSize = 16f
             minHeight = dp(58)
-            background = AppTheme.primaryButton(this@MainActivity)
+            background = AppTheme.primaryButton(this@buildScreen)
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
         addTo(homePage, calculateButton, 14)
@@ -376,7 +376,7 @@ internal fun MainActivity.buildScreen() {
                 background = rounded(Color.rgb(10, 39, 68), 13, Color.rgb(26, 108, 173), 1)
                 layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(3); marginEnd = dp(3) }
                 addView(valueText)
-                addView(TextView(this@MainActivity).apply { text = tr(fa, en); textSize = 10f; setTextColor(AppTheme.TEXT_SECONDARY); gravity = Gravity.CENTER; setPadding(0, dp(3), 0, 0) })
+                addView(TextView(this@buildScreen).apply { text = tr(fa, en); textSize = 10f; setTextColor(AppTheme.TEXT_SECONDARY); gravity = Gravity.CENTER; setPadding(0, dp(3), 0, 0) })
             }
             return box to valueText
         }
@@ -502,7 +502,7 @@ internal fun MainActivity.buildScreen() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(7), dp(8), dp(7))
-            background = AppTheme.navBackground(this@MainActivity)
+            background = AppTheme.navBackground(this@buildScreen)
             elevation = dp(12).toFloat()
         }
         fun navItem(icon: String, fa: String, en: String, index: Int) {
