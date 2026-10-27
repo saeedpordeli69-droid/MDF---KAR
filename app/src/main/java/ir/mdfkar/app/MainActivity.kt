@@ -51,6 +51,9 @@ class MainActivity : Activity() {
     private lateinit var resultText: TextView
     private lateinit var partsList: LinearLayout
     private lateinit var layoutView: SheetLayoutView
+    private lateinit var sheetCounterLabel: TextView
+    private lateinit var previousSheetButton: Button
+    private lateinit var nextSheetButton: Button
 
     private lateinit var widthInput: EditText
     private lateinit var heightInput: EditText
@@ -75,6 +78,8 @@ class MainActivity : Activity() {
     private var latestPlacements: List<Placement> = emptyList()
     private var latestSheetW = 2800.0
     private var latestSheetH = 2070.0
+    private var latestSheetCount = 0
+    private var selectedSheetIndex = 0
 
     data class Part(val name: String, val width: Double, val height: Double, val quantity: Int = 1, val rotate: Boolean = true)
     data class Placement(val name: String, val x: Double, val y: Double, val width: Double, val height: Double, val rotated: Boolean, val sheet: Int)
@@ -448,8 +453,39 @@ class MainActivity : Activity() {
         metricsRow.addView(mPieces.first)
         addTo(metricsCard, metricsRow, 1)
         val layoutCard = addSection(resultsPage, "نقشه چیدمان ورق‌ها", "Sheet layout")
+        val sheetNavigation = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+        }
+        previousSheetButton = button("‹ ورق قبلی", "‹ Previous sheet") {
+            if (selectedSheetIndex > 0) {
+                selectedSheetIndex--
+                updateSheetNavigation()
+                layoutView.invalidate()
+            }
+        }.apply { textSize = 12f }
+        sheetCounterLabel = TextView(this).apply {
+            text = tr("پس از محاسبه", "Calculate first")
+            textSize = 13f
+            setTextColor(ink)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), 0, dp(8), 0)
+        }
+        nextSheetButton = button("ورق بعدی ›", "Next sheet ›") {
+            if (selectedSheetIndex < latestSheetCount - 1) {
+                selectedSheetIndex++
+                updateSheetNavigation()
+                layoutView.invalidate()
+            }
+        }.apply { textSize = 12f }
+        sheetNavigation.addView(previousSheetButton, LinearLayout.LayoutParams(0, dp(42), 1f))
+        sheetNavigation.addView(sheetCounterLabel, LinearLayout.LayoutParams(0, dp(42), 1f))
+        sheetNavigation.addView(nextSheetButton, LinearLayout.LayoutParams(0, dp(42), 1f))
+        layoutCard.addView(sheetNavigation, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         layoutView = SheetLayoutView().apply { background = rounded(Color.rgb(4, 19, 34), 14, AppTheme.CARD_BORDER, 1) }
         layoutCard.addView(layoutView, LinearLayout.LayoutParams(-1, dp(270)))
+        updateSheetNavigation()
         val partsCard = addSection(resultsPage, "فهرست قطعات و جزئیات", "Parts list & details")
         partsList = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -855,6 +891,9 @@ class MainActivity : Activity() {
         latestPlacements = layout.placements
         latestSheetW = sw
         latestSheetH = sh
+        latestSheetCount = layout.sheetCount
+        selectedSheetIndex = 0
+        updateSheetNavigation()
         layoutView.invalidate()
 
         val boardArea = boardParts.sumOf { it.width * it.height * it.quantity }
@@ -1015,6 +1054,17 @@ class MainActivity : Activity() {
         return PackResult(placements, rowsBySheet.size)
     }
 
+    private fun updateSheetNavigation() {
+        if (!::sheetCounterLabel.isInitialized) return
+        val total = latestSheetCount
+        sheetCounterLabel.text = if (total <= 0) tr("پس از محاسبه", "Calculate first") else {
+            val current = selectedSheetIndex + 1
+            if (english) "Sheet $current of $total" else "ورق ${faDigits(current.toString())} از ${faDigits(total.toString())}"
+        }
+        if (::previousSheetButton.isInitialized) previousSheetButton.isEnabled = selectedSheetIndex > 0 && total > 1
+        if (::nextSheetButton.isInitialized) nextSheetButton.isEnabled = selectedSheetIndex < total - 1 && total > 1
+    }
+
     private inner class SheetLayoutView : View(this@MainActivity) {
         private val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = AppTheme.ACCENT
@@ -1042,7 +1092,7 @@ class MainActivity : Activity() {
             val top = (height - sheetPixelH) / 2f
             canvas.drawRect(left, top, left + sheetPixelW, top + sheetPixelH, border)
             latestPlacements.forEachIndexed { i, p ->
-                if (p.sheet != 0) return@forEachIndexed
+                if (p.sheet != selectedSheetIndex) return@forEachIndexed
                 val l = left + p.x.toFloat() * scale
                 val t = top + p.y.toFloat() * scale
                 val r = l + p.width.toFloat() * scale
@@ -1058,6 +1108,11 @@ class MainActivity : Activity() {
             if (latestPlacements.isEmpty()) {
                 canvas.drawText(
                     tr("پس از محاسبه، نقشه اینجا نمایش داده می‌شود", "Layout appears here after calculation"),
+                    width / 2f, height / 2f, textPaint
+                )
+            } else if (latestPlacements.none { it.sheet == selectedSheetIndex }) {
+                canvas.drawText(
+                    tr("این ورق قطعه‌ای ندارد", "No pieces on this sheet"),
                     width / 2f, height / 2f, textPaint
                 )
             }
