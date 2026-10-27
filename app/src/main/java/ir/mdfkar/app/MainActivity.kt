@@ -185,6 +185,8 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(3, 13, 27))
             layoutDirection = if (english) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
+            // Keep the app's own bottom navigation above Android's system navigation area.
+            setPadding(0, 0, 0, dp(24))
         }
 
         val pageHost = android.widget.FrameLayout(this)
@@ -254,7 +256,33 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
             addView(label(labelFa, labelEn, 12f))
-            addView(input)
+            val stepper = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = rounded(Color.rgb(10, 31, 53), 13, Color.rgb(43, 102, 153), 1)
+                setPadding(dp(4), dp(2), dp(4), dp(2))
+            }
+            fun stepButton(symbol: String, delta: Double): TextView = TextView(this@MainActivity).apply {
+                text = symbol
+                textSize = 19f
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                background = rounded(Color.rgb(13, 68, 124), 50, Color.rgb(27, 113, 190), 1)
+                layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    val current = number(input.text.toString()) ?: 0.0
+                    val next = (current + delta).coerceAtLeast(0.0)
+                    val value = if (next % 1.0 == 0.0) next.toLong().toString() else fmt(next)
+                    input.setText(if (english) value else faDigits(value))
+                    input.setSelection(input.text.length)
+                }
+            }
+            stepper.addView(stepButton("−", -1.0))
+            stepper.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+            stepper.addView(stepButton("+", 1.0))
+            addView(stepper)
         }
         fun pairedRow(target: LinearLayout, left: LinearLayout, right: LinearLayout) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
