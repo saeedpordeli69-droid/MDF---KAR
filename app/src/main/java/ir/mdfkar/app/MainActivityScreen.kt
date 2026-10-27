@@ -219,7 +219,7 @@ internal fun MainActivity.buildScreen() {
                     }
                 }
             }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-            setSelection((prefs().getInt("cabinetType", 0) + 1).coerceIn(1, 2))
+            setSelection(prefs().getInt("cabinetType", 0).coerceIn(0, 2))
             background = rounded(Color.rgb(12, 37, 63), 12, Color.rgb(39, 105, 159), 1)
             setPadding(dp(8), dp(4), dp(8), dp(4))
             dropDownVerticalOffset = dp(4)
@@ -229,13 +229,18 @@ internal fun MainActivity.buildScreen() {
         cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (position == 0) {
-                    // These views are created later in buildScreen(); the spinner callback
-                    // can fire before their lateinit properties have been initialized.
-                    runCatching {
-                        customPartsSection.visibility = View.VISIBLE
-                        customPartModeSpinner.setSelection(0)
-                        updateCustomPartsToggleLabel()
+                // Selection now visibly switches between direct independent-part entry and
+                // the normal cabinet dimension form.
+                runCatching {
+                    val independent = position == 0
+                    customPartsSection.visibility = if (independent) View.VISIBLE else View.GONE
+                    customPartsToggleButton.visibility = View.GONE
+                    customPartModeSpinner.setSelection(0)
+                    updateCustomPartsToggleLabel()
+                    if (::customPartsSection.isInitialized) {
+                        // Hide the old linked/custom-part workflow: independent cutting is direct.
+                        for (index in 4..8) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
+                        for (index in 9..11) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
                     }
                 }
             }
