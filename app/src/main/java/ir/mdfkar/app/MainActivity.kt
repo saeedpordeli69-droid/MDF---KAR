@@ -144,7 +144,7 @@ class MainActivity : Activity() {
             .putString("sheetWidth", sheetWidthInput.text.toString())
             .putString("sheetHeight", sheetHeightInput.text.toString())
             .putString("kerf", kerfInput.text.toString())
-            .putInt("cabinetType", (cabinetSpinner.selectedItemPosition - 1).coerceIn(0, 1))
+            .putInt("cabinetType", cabinetSpinner.selectedItemPosition.coerceIn(0, 2))
             .putBoolean("includeBack", includeBackCheck.isChecked)
             .putBoolean("legs", legsCheck.isChecked)
             .putBoolean("doorPvc", doorPvcCheck.isChecked)
@@ -232,7 +232,7 @@ class MainActivity : Activity() {
             put("sheetWidth", sheetWidthInput.text.toString())
             put("sheetHeight", sheetHeightInput.text.toString())
             put("kerf", kerfInput.text.toString())
-            put("cabinetType", (cabinetSpinner.selectedItemPosition - 1).coerceIn(0, 1))
+            put("cabinetType", cabinetSpinner.selectedItemPosition.coerceIn(0, 2))
             put("includeBack", includeBackCheck.isChecked)
             put("legs", legsCheck.isChecked)
             put("doorPvc", doorPvcCheck.isChecked)
@@ -499,8 +499,22 @@ class MainActivity : Activity() {
     }
 
     internal fun calculate() {
-        if (cabinetSpinner.selectedItemPosition == 0 && customParts.isEmpty()) {
-            resultText.text = tr("برای برش مستقل، ابتدا قطعه و ابعاد دقیق آن را در بخش قطعات سفارشی اضافه کنید.", "For independent cutting, first add a part with exact dimensions in the Custom parts section.")
+        // Independent cutting uses the dimensions entered directly in its form; no separate
+        // "custom cutting"/add-part workflow is required.
+        if (cabinetSpinner.selectedItemPosition == 0) {
+            val name = customPartNameInput.text.toString().trim().ifBlank { tr("قطعه مستقل", "Independent part") }
+            val length = number(customPartLengthInput.text.toString())
+            val width = number(customPartWidthInput.text.toString())
+            val qty = number(customPartQtyInput.text.toString())?.toInt()
+            val thickness = number(customPartThicknessInput.text.toString())
+            if (length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0) {
+                resultText.text = tr("نام قطعه، طول، عرض، ضخامت و تعداد معتبر وارد کنید.", "Enter a part name, valid length, width, thickness and quantity.")
+                return
+            }
+            orderCabinets.clear()
+            customParts.clear()
+            customParts += CustomOrderPart(name, length, width, qty, thickness)
+            calculateMultiCabinetOrder()
             return
         }
         if (orderCabinets.isNotEmpty() || customParts.isNotEmpty()) {
