@@ -211,7 +211,7 @@ class MainActivity : Activity() {
         }
         val homePage = makePage()
         // Keep the hero close to the status bar while leaving a safe visual gap below system icons.
-        homePage.setPadding(dp(16), dp(5), dp(16), dp(28))
+        homePage.setPadding(dp(16), dp(28), dp(16), dp(28))
         val resultsPage = makePage()
         val projectsPage = makePage()
         val settingsPage = makePage()
