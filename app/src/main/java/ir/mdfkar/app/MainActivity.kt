@@ -15,6 +15,7 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.ArrayAdapter
@@ -125,7 +126,8 @@ class MainActivity : Activity() {
 
     private fun field(hintFa: String, hintEn: String, key: String, fallback: String): EditText {
         return EditText(this).apply {
-            hint = tr(hintFa, hintEn)
+            // Labels are displayed above each field; keep the field itself free of placeholder text.
+            hint = ""
             setText(if (english) saved(key, fallback) else faDigits(saved(key, fallback)))
             textSize = 16f
             inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
@@ -208,6 +210,8 @@ class MainActivity : Activity() {
             return pageContent
         }
         val homePage = makePage()
+        // Keep the hero close to the status bar while leaving a safe visual gap below system icons.
+        homePage.setPadding(dp(16), dp(5), dp(16), dp(28))
         val resultsPage = makePage()
         val projectsPage = makePage()
         val settingsPage = makePage()
@@ -336,8 +340,14 @@ class MainActivity : Activity() {
             addTo(target, header, 10)
         }
 
-        // HOME: only the inputs needed to describe a cabinet. Results and advanced options are separate tabs.
-        addPageHeading(homePage, "محاسبه کابینت", "Cabinet calculator", "ابعاد را وارد کنید و نتیجه برش را جداگانه ببینید", "Enter dimensions; view the cutting plan on its own screen")
+        // HOME: reference hero artwork includes the centered white/blue logo, MDF boards and slogan.
+        val homeHero = ImageView(this).apply {
+            setImageResource(ir.mdfkar.app.R.drawable.mdf_hero)
+            scaleType = android.widget.ImageView.ScaleType.FIT_XY
+            contentDescription = tr("لوگوی MDF-KAR و ورق‌های MDF؛ برش هوشمند، صرفه‌جویی در زمان و هزینه", "MDF-KAR logo and MDF boards; smart cutting saves time and cost")
+            adjustViewBounds = false
+        }
+        homePage.addView(homeHero, LinearLayout.LayoutParams(-1, dp(164)).apply { bottomMargin = dp(10) })
         val sheetCard = addSection(homePage, "ابعاد ورق MDF", "MDF sheet dimensions", "همه اندازه‌ها بر حسب میلی‌متر", "All measurements in millimeters")
         sheetWidthInput = field("عرض ورق", "Sheet width", "sheetWidth", "۲۰۷۰")
         sheetHeightInput = field("طول ورق", "Sheet length", "sheetHeight", "۲۸۰۰")
