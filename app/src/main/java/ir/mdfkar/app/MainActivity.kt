@@ -144,7 +144,7 @@ class MainActivity : Activity() {
             .putString("sheetWidth", sheetWidthInput.text.toString())
             .putString("sheetHeight", sheetHeightInput.text.toString())
             .putString("kerf", kerfInput.text.toString())
-            .putInt("cabinetType", cabinetSpinner.selectedItemPosition)
+            .putInt("cabinetType", (cabinetSpinner.selectedItemPosition - 1).coerceIn(0, 1))
             .putBoolean("includeBack", includeBackCheck.isChecked)
             .putBoolean("legs", legsCheck.isChecked)
             .putBoolean("doorPvc", doorPvcCheck.isChecked)
@@ -232,7 +232,7 @@ class MainActivity : Activity() {
             put("sheetWidth", sheetWidthInput.text.toString())
             put("sheetHeight", sheetHeightInput.text.toString())
             put("kerf", kerfInput.text.toString())
-            put("cabinetType", cabinetSpinner.selectedItemPosition)
+            put("cabinetType", (cabinetSpinner.selectedItemPosition - 1).coerceIn(0, 1))
             put("includeBack", includeBackCheck.isChecked)
             put("legs", legsCheck.isChecked)
             put("doorPvc", doorPvcCheck.isChecked)
@@ -418,7 +418,7 @@ class MainActivity : Activity() {
             putText("sheetWidth", sheetWidthInput)
             putText("sheetHeight", sheetHeightInput)
             putText("kerf", kerfInput)
-            cabinetSpinner.setSelection(data.optInt("cabinetType", 0).coerceIn(0, 1))
+            cabinetSpinner.setSelection((data.optInt("cabinetType", 0) + 1).coerceIn(1, 2))
             includeBackCheck.isChecked = data.optBoolean("includeBack", true)
             legsCheck.isChecked = data.optBoolean("legs", true)
             doorPvcCheck.isChecked = data.optBoolean("doorPvc", true)
@@ -499,6 +499,10 @@ class MainActivity : Activity() {
     }
 
     internal fun calculate() {
+        if (cabinetSpinner.selectedItemPosition == 0 && customParts.isEmpty()) {
+            resultText.text = tr("برای برش مستقل، ابتدا قطعه و ابعاد دقیق آن را در بخش قطعات سفارشی اضافه کنید.", "For independent cutting, first add a part with exact dimensions in the Custom parts section.")
+            return
+        }
         if (orderCabinets.isNotEmpty() || customParts.isNotEmpty()) {
             calculateMultiCabinetOrder()
             return
@@ -528,7 +532,7 @@ class MainActivity : Activity() {
             return
         }
 
-        val isBase = cabinetSpinner.selectedItemPosition == 0
+        val isBase = cabinetSpinner.selectedItemPosition != 2
         val plinth = if (isBase && legsCheck.isChecked) plinthInputValue else 0.0
         val bodyH = h - plinth
         val innerW = w - 2 * t
