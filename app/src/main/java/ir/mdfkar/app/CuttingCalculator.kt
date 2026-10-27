@@ -111,21 +111,29 @@ object CuttingCalculator {
                 continue
             }
 
-            // 1) Best-fit existing row across every sheet, not just the first sheet.
+            // 1) Best-fit existing row, prioritizing the earliest sheet.
+            // Do not place a part on sheet 2 while a valid row fit exists on sheet 1.
             var bestFit: Fit? = null
             for (sheetIndex in rowsBySheet.indices) {
+                var bestOnThisSheet: Fit? = null
                 for (row in rowsBySheet[sheetIndex]) {
                     val remaining = sheetW - row.x
                     for ((w, h, rotated) in orientations) {
-                        if (w <= remaining && h <= row.height) {
+                        if (w <= remaining + 0.0001 && h <= row.height + 0.0001) {
                             val fit = Fit(
                                 sheetIndex, row, w, h, rotated,
                                 row.height - h,
                                 remaining - w
                             )
-                            if (bestFit == null || compareFit(fit, bestFit!!) < 0) bestFit = fit
+                            if (bestOnThisSheet == null || compareFit(fit, bestOnThisSheet!!) < 0) {
+                                bestOnThisSheet = fit
+                            }
                         }
                     }
+                }
+                if (bestOnThisSheet != null) {
+                    bestFit = bestOnThisSheet
+                    break
                 }
             }
             if (bestFit != null) {
@@ -135,16 +143,25 @@ object CuttingCalculator {
                 continue
             }
 
-            // 2) Otherwise choose the tightest new row on any existing sheet.
+            // 2) Otherwise try a new row on the earliest existing sheet first.
+            // Only move to the next sheet if no allowed orientation fits vertically
+            // on the earlier sheet.
             var bestNewRow: NewRowFit? = null
             for (sheetIndex in rowsBySheet.indices) {
                 val rows = rowsBySheet[sheetIndex]
                 val nextY = if (rows.isEmpty()) 0.0 else rows.maxOf { it.y + it.height } + kerf
+                var bestOnThisSheet: NewRowFit? = null
                 for ((w, h, rotated) in orientations) {
-                    if (w <= sheetW && nextY + h <= sheetH) {
+                    if (w <= sheetW + 0.0001 && nextY + h <= sheetH + 0.0001) {
                         val fit = NewRowFit(sheetIndex, nextY, w, h, rotated, sheetH - (nextY + h))
-                        if (bestNewRow == null || compareNewRow(fit, bestNewRow!!) < 0) bestNewRow = fit
+                        if (bestOnThisSheet == null || compareNewRow(fit, bestOnThisSheet!!) < 0) {
+                            bestOnThisSheet = fit
+                        }
                     }
+                }
+                if (bestOnThisSheet != null) {
+                    bestNewRow = bestOnThisSheet
+                    break
                 }
             }
             if (bestNewRow != null) {
