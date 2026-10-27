@@ -48,6 +48,7 @@ class MainActivity : Activity() {
     private lateinit var metricWaste: TextView
     private lateinit var metricPieces: TextView
     private lateinit var resultText: TextView
+    private lateinit var partsList: LinearLayout
     private lateinit var layoutView: SheetLayoutView
 
     private lateinit var widthInput: EditText
@@ -185,8 +186,9 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(3, 13, 27))
             layoutDirection = if (english) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
-            // Keep the app's own bottom navigation above Android's system navigation area.
-            setPadding(0, 0, 0, dp(24))
+            // Insets are applied below after the view is attached, so the app navigation
+            // never sits underneath Android's gesture/three-button navigation bar.
+            setPadding(0, 0, 0, 0)
         }
 
         val pageHost = android.widget.FrameLayout(this)
@@ -294,16 +296,30 @@ class MainActivity : Activity() {
         fun addPageHeading(target: LinearLayout, titleFa: String, titleEn: String, subFa: String, subEn: String) {
             val header = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(18), dp(18), dp(18), dp(18))
+                setPadding(dp(16), dp(12), dp(16), dp(12))
                 background = AppTheme.heroBackground(this@MainActivity)
                 elevation = dp(3).toFloat()
             }
-            header.addView(TextView(this).apply {
-                text = "MDF-KAR"
-                textSize = 27f
-                setTextColor(Color.WHITE)
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                letterSpacing = 0.035f
+            header.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val mark = TextView(this@MainActivity).apply {
+                    text = "▰"
+                    textSize = 25f
+                    setTextColor(AppTheme.ACCENT)
+                    setPadding(0, 0, dp(7), 0)
+                }
+                addView(mark)
+                val brand = TextView(this@MainActivity).apply {
+                    text = android.text.SpannableString("MDF-KAR").apply {
+                        setSpan(android.text.style.ForegroundColorSpan(Color.WHITE), 0, 3, 0)
+                        setSpan(android.text.style.ForegroundColorSpan(AppTheme.ACCENT), 4, 7, 0)
+                    }
+                    textSize = 25f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    letterSpacing = 0.025f
+                }
+                addView(brand)
             })
             header.addView(TextView(this).apply {
                 text = tr(titleFa, titleEn)
@@ -317,7 +333,7 @@ class MainActivity : Activity() {
                 textSize = 12f
                 setTextColor(AppTheme.TEXT_SECONDARY)
             })
-            addTo(target, header, 14)
+            addTo(target, header, 10)
         }
 
         // HOME: only the inputs needed to describe a cabinet. Results and advanced options are separate tabs.
@@ -403,11 +419,23 @@ class MainActivity : Activity() {
         layoutView = SheetLayoutView().apply { background = rounded(Color.rgb(4, 19, 34), 14, AppTheme.CARD_BORDER, 1) }
         layoutCard.addView(layoutView, LinearLayout.LayoutParams(-1, dp(270)))
         val partsCard = addSection(resultsPage, "فهرست قطعات و جزئیات", "Parts list & details")
-        resultText = TextView(this).apply {
-            text = tr("هنوز محاسبه‌ای انجام نشده است. به خانه برگردید و دکمه محاسبه را بزنید.", "No calculation yet. Return Home and tap Calculate.")
-            textSize = 13f
+        partsList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(Color.rgb(5, 22, 39), 13, Color.rgb(25, 79, 124), 1)
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+        }
+        partsList.addView(TextView(this).apply {
+            text = tr("پس از محاسبه، فهرست رنگی قطعات اینجا نمایش داده می‌شود.", "After calculation, the color-coded parts list appears here.")
+            textSize = 12f
             setTextColor(ink)
-            setPadding(dp(13), dp(13), dp(13), dp(13))
+            setPadding(dp(8), dp(10), dp(8), dp(10))
+        })
+        addTo(partsCard, partsList, 8)
+        resultText = TextView(this).apply {
+            text = tr("جزئیات محاسبه پس از انجام محاسبه نمایش داده می‌شود.", "Calculation details appear here after calculating.")
+            textSize = 12f
+            setTextColor(ink)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
             background = rounded(Color.rgb(5, 22, 39), 13, Color.rgb(25, 79, 124), 1)
         }
         addTo(partsCard, resultText, 1)
@@ -475,6 +503,13 @@ class MainActivity : Activity() {
         navItem("⚙", "تنظیمات", "Settings", 3)
         root.addView(nav, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT_WATCH) {
+            root.setOnApplyWindowInsetsListener { view, insets ->
+                view.setPadding(0, 0, 0, insets.systemWindowInsetBottom + dp(6))
+                insets
+            }
+            root.requestApplyInsets()
+        }
         showPage(0)
     }
 
@@ -503,13 +538,35 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun styleDialog(dialog: AlertDialog) {
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(rounded(Color.rgb(7, 24, 43), 20, AppTheme.CARD_BORDER, 1))
+            dialog.listView?.let { list ->
+                list.setBackgroundColor(Color.rgb(7, 24, 43))
+                for (i in 0 until list.childCount) {
+                    (list.getChildAt(i) as? TextView)?.setTextColor(AppTheme.TEXT)
+                }
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(AppTheme.ACCENT)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(AppTheme.TEXT_SECONDARY)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(AppTheme.ACCENT)
+            val messageId = resources.getIdentifier("message", "id", "android")
+            dialog.findViewById<TextView>(messageId)?.setTextColor(AppTheme.TEXT_SECONDARY)
+            val titleId = resources.getIdentifier("alertTitle", "id", "android")
+            dialog.findViewById<TextView>(titleId)?.setTextColor(AppTheme.ACCENT)
+        }
+    }
+
     private fun saveProjectDialog() {
         val nameInput = EditText(this).apply {
             hint = tr("نام پروژه (مثلاً کابینت آشپزخانه)", "Project name (e.g. kitchen cabinet)")
             setSingleLine(true)
             setTextColor(ink)
+            setHintTextColor(muted)
+            background = rounded(fieldFill, 12, AppTheme.FIELD_BORDER, 1)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(tr("ذخیره پروژه", "Save project"))
             .setMessage(tr("برای این طرح یک نام وارد کنید.", "Enter a name for this design."))
             .setView(nameInput)
@@ -531,7 +588,9 @@ class MainActivity : Activity() {
                     Toast.makeText(this, tr("ذخیره پروژه انجام نشد.", "Could not save project."), Toast.LENGTH_LONG).show()
                 }
             }
-            .show()
+            .create()
+        styleDialog(dialog)
+        dialog.show()
     }
 
     private fun chooseProjectToLoad() {
@@ -545,11 +604,13 @@ class MainActivity : Activity() {
             try { JSONObject(file.readText(Charsets.UTF_8)).optString("projectName", file.nameWithoutExtension) }
             catch (_: Exception) { file.nameWithoutExtension }
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(tr("انتخاب پروژه", "Choose a project"))
             .setItems(names.toTypedArray()) { _, which -> loadProject(files[which]) }
             .setNegativeButton(tr("انصراف", "Cancel"), null)
-            .show()
+            .create()
+        styleDialog(dialog)
+        dialog.show()
     }
 
     private fun manageProjectsDialog() {
@@ -563,11 +624,13 @@ class MainActivity : Activity() {
             try { JSONObject(file.readText(Charsets.UTF_8)).optString("projectName", file.nameWithoutExtension) }
             catch (_: Exception) { file.nameWithoutExtension }
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(tr("مدیریت پروژه‌ها", "Manage projects"))
             .setItems(names.toTypedArray()) { _, which -> projectActions(files[which], names[which]) }
             .setNegativeButton(tr("بستن", "Close"), null)
-            .show()
+            .create()
+        styleDialog(dialog)
+        dialog.show()
     }
 
     private fun projectActions(file: File, currentName: String) {
@@ -600,7 +663,7 @@ class MainActivity : Activity() {
             background = rounded(fieldFill, 12, Color.rgb(56, 73, 98), 1)
             setPadding(dp(12), dp(8), dp(12), dp(8))
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(tr("تغییر نام پروژه", "Rename project"))
             .setView(input)
             .setNegativeButton(tr("انصراف", "Cancel"), null)
@@ -625,14 +688,19 @@ class MainActivity : Activity() {
                 } catch (_: Exception) {
                     Toast.makeText(this, tr("تغییر نام انجام نشد.", "Could not rename project."), Toast.LENGTH_LONG).show()
                 }
-            }.show()
+            }.create()
+        styleDialog(dialog)
+        dialog.show()
     }
 
     private fun loadProject(file: File) {
         try {
             val data = JSONObject(file.readText(Charsets.UTF_8))
             fun putText(key: String, field: EditText) {
-                if (data.has(key)) field.setText(data.optString(key, ""))
+                if (data.has(key)) {
+                    val raw = data.optString(key, "")
+                    field.setText(if (english) raw else faDigits(raw))
+                }
             }
             putText("width", widthInput)
             putText("height", heightInput)
@@ -656,6 +724,18 @@ class MainActivity : Activity() {
             Toast.makeText(this, tr("پروژه بارگذاری شد.", "Project loaded."), Toast.LENGTH_SHORT).show()
         } catch (_: Exception) {
             Toast.makeText(this, tr("فایل پروژه قابل خواندن نیست.", "Could not read project file."), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun partColor(name: String): Int {
+        val key = name.lowercase(Locale.ROOT)
+        return when {
+            key.contains("پهلو") || key.contains("side") -> Color.rgb(55, 145, 230)
+            key.contains("کف") || key.contains("bottom") -> Color.rgb(65, 185, 165)
+            key.contains("طبقه") || key.contains("shelf") -> Color.rgb(155, 115, 225)
+            key.contains("درب") || key.contains("door") -> Color.rgb(235, 135, 90)
+            key.contains("پشت") || key.contains("back") -> Color.rgb(70, 115, 175)
+            else -> Color.rgb(80, 170, 220)
         }
     }
 
@@ -760,13 +840,45 @@ class MainActivity : Activity() {
         if (sidePvcCheck.isChecked) pvcMeters += 2 * bodyH / 1000.0
         if (shelfPvcCheck.isChecked) pvcMeters += (1 + shelves) * innerW / 1000.0
 
-        val listText = parts.joinToString("\n") {
-            "• ${it.name}: ${fmt(it.width)} × ${fmt(it.height)} mm × ${it.quantity}"
+        partsList.removeAllViews()
+        parts.forEachIndexed { index, part ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(7), dp(8), dp(7), dp(8))
+                if (index % 2 == 0) setBackgroundColor(Color.rgb(8, 30, 51))
+            }
+            row.addView(View(this).apply {
+                background = rounded(partColor(part.name), 5)
+                layoutParams = LinearLayout.LayoutParams(dp(12), dp(28)).apply { marginEnd = dp(8) }
+            })
+            row.addView(TextView(this).apply {
+                text = part.name
+                textSize = 12f
+                setTextColor(ink)
+                gravity = if (english) Gravity.START else Gravity.END
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1.2f)
+            })
+            row.addView(TextView(this).apply {
+                val dims = "${fmt(part.width)} × ${fmt(part.height)}"
+                text = if (english) "$dims mm" else "${faDigits(dims)} میلی‌متر"
+                textSize = 11f
+                setTextColor(AppTheme.TEXT_SECONDARY)
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1.5f)
+            })
+            row.addView(TextView(this).apply {
+                text = if (english) part.quantity.toString() else faDigits(part.quantity.toString())
+                textSize = 12f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(32), -2)
+            })
+            partsList.addView(row)
+            if (index < parts.lastIndex) partsList.addView(View(this).apply { setBackgroundColor(Color.rgb(28, 61, 89)); layoutParams = LinearLayout.LayoutParams(-1, dp(1)) })
         }
         val summaryFa = """
-            فهرست قطعات:
-            $listText
-
+            جزئیات برش:
             ورق بدنه: ${sheetCount} عدد (${fmt(sw)} × ${fmt(sh)} میلی‌متر)
             مساحت قطعات بدنه: ${fmt(boardArea / 1_000_000.0)} مترمربع
             دورریز تخمینی بر اساس مساحت: ${fmt(wastePercent)}٪
@@ -778,9 +890,7 @@ class MainActivity : Activity() {
             هشدار: این نقشه از چیدمان ردیفی/قفسه‌ای استفاده می‌کند و تضمین بهینه‌ترین برش صنعتی نیست. پشت‌بند جدا محاسبه شده و در نقشه ورق بدنه نیست.
         """.trimIndent()
         val summaryEn = """
-            Parts list:
-            $listText
-
+            Cutting details:
             Carcass sheets: $sheetCount (${fmt(sw)} × ${fmt(sh)} mm)
             Carcass part area: ${fmt(boardArea / 1_000_000.0)} m²
             Estimated area-based waste: ${fmt(wastePercent)}%
@@ -893,18 +1003,13 @@ class MainActivity : Activity() {
             val left = (width - sheetPixelW) / 2f
             val top = (height - sheetPixelH) / 2f
             canvas.drawRect(left, top, left + sheetPixelW, top + sheetPixelH, border)
-            val colors = intArrayOf(
-                Color.rgb(55, 145, 230), Color.rgb(65, 185, 165),
-                Color.rgb(155, 115, 225), Color.rgb(235, 135, 90),
-                Color.rgb(70, 115, 175), Color.rgb(80, 170, 220)
-            )
             latestPlacements.forEachIndexed { i, p ->
                 if (p.sheet != 0) return@forEachIndexed
                 val l = left + p.x.toFloat() * scale
                 val t = top + p.y.toFloat() * scale
                 val r = l + p.width.toFloat() * scale
                 val b = t + p.height.toFloat() * scale
-                fill.color = colors[i % colors.size]
+                fill.color = partColor(p.name)
                 canvas.drawRect(l, t, r, b, fill)
                 canvas.drawRect(l, t, r, b, border)
                 if (r - l > dp(24) && b - t > dp(15)) {
