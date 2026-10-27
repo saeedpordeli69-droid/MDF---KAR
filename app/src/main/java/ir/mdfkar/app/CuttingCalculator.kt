@@ -143,7 +143,7 @@ object CuttingCalculator {
             if (best == null) {
                 // Only now create a new sheet, and initialize its full free rectangle.
                 val index = freeBySheet.size
-                freeBySheet += mutableListOf(Rect(0.0, 0.0, sheetW, sheetH))
+                freeBySheet.add(mutableListOf(Rect(0.0, 0.0, sheetW, sheetH)))
                 for ((w, h, rotated) in orientations) {
                     val reserveW = w + if (w < sheetW) kerf else 0.0
                     val reserveH = h + if (h < sheetH) kerf else 0.0
