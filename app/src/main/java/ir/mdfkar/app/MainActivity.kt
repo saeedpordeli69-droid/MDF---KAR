@@ -43,6 +43,10 @@ class MainActivity : Activity() {
     private var english = false
     private lateinit var root: LinearLayout
     private lateinit var content: LinearLayout
+    private lateinit var nav: LinearLayout
+    private lateinit var metricSheets: TextView
+    private lateinit var metricWaste: TextView
+    private lateinit var metricPieces: TextView
     private lateinit var resultText: TextView
     private lateinit var layoutView: SheetLayoutView
 
@@ -170,240 +174,272 @@ class MainActivity : Activity() {
     private fun buildScreen() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(pale)
+            setBackgroundColor(Color.rgb(3, 13, 27))
             layoutDirection = if (english) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
         }
 
-        val scroll = ScrollView(this).apply { clipToPadding = false }
-        content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(20))
-            background = rounded(pale, 0)
+        val pageHost = android.widget.FrameLayout(this)
+        val pages = mutableListOf<LinearLayout>()
+        fun makePage(): LinearLayout {
+            val pageContent = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(12), dp(16), dp(18))
+            }
+            val scroll = ScrollView(this).apply {
+                clipToPadding = false
+                isFillViewport = true
+                addView(pageContent)
+            }
+            pageHost.addView(scroll, android.widget.FrameLayout.LayoutParams(-1, -1))
+            pages.add(pageContent)
+            return pageContent
         }
-        scroll.addView(content)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        val homePage = makePage()
+        val resultsPage = makePage()
+        val projectsPage = makePage()
+        val settingsPage = makePage()
+        val pageViews = (0 until pageHost.childCount).map { pageHost.getChildAt(it) }
+        root.addView(pageHost, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        // Hero banner: a real layout component, not just a recolored title bar.
-        val hero = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(22))
-            background = AppTheme.heroBackground(this@MainActivity)
-            elevation = dp(3).toFloat()
-        }
-        val heroTop = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val brand = TextView(this).apply {
-            text = "MDF-KAR"
-            textSize = 30f
-            setTextColor(Color.WHITE)
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            letterSpacing = 0.04f
-            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-        }
-        val languageButton = TextView(this).apply {
-            text = if (english) "فارسی" else "EN"
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setPadding(dp(14), dp(9), dp(14), dp(9))
-            background = rounded(Color.rgb(18, 48, 83), 18, AppTheme.ACCENT, 1)
-            setOnClickListener {
-                saveSettings()
-                english = !english
-                prefs().edit().putBoolean("english", english).apply()
-                buildScreen()
+        fun showPage(index: Int) {
+            pageViews.forEachIndexed { i, view -> view.visibility = if (i == index) View.VISIBLE else View.GONE }
+            if (index == 1) layoutView.invalidate()
+            // Keep the selected tab visibly highlighted.
+            for (i in 0 until nav.childCount) {
+                val item = nav.getChildAt(i) as LinearLayout
+                val active = i == index
+                (item.getChildAt(0) as TextView).setTextColor(if (active) AppTheme.ACCENT else muted)
+                (item.getChildAt(1) as TextView).setTextColor(if (active) AppTheme.ACCENT else muted)
+                item.background = if (active) rounded(Color.rgb(12, 42, 76), 14, Color.rgb(20, 113, 205), 1) else rounded(Color.TRANSPARENT, 14)
             }
         }
-        heroTop.addView(brand)
-        heroTop.addView(languageButton)
-        hero.addView(heroTop)
-        hero.addView(TextView(this).apply {
-            text = tr("محاسبه و چیدمان هوشمند ورق MDF", "MDF cabinet calculator & cut planner")
-            textSize = 15f
-            setTextColor(AppTheme.TEXT_SECONDARY)
-            setPadding(0, dp(4), 0, dp(12))
-        })
-        val heroFoot = TextView(this).apply {
-            text = tr("طراحی دقیق‌تر  •  برش بهینه‌تر  •  مدیریت پروژه‌ها", "Plan smarter  •  Cut cleaner  •  Manage projects")
-            textSize = 12f
-            setTextColor(AppTheme.ACCENT)
-            setPadding(0, dp(8), 0, 0)
-        }
-        hero.addView(heroFoot)
-        val heroParams = LinearLayout.LayoutParams(-1, -2)
-        heroParams.bottomMargin = dp(16)
-        content.addView(hero, heroParams)
 
-        fun section(titleFa: String, titleEn: String, subtitleFa: String? = null, subtitleEn: String? = null): LinearLayout {
+        fun addSection(target: LinearLayout, titleFa: String, titleEn: String, subtitleFa: String? = null, subtitleEn: String? = null): LinearLayout {
             val box = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(15), dp(8), dp(15), dp(14))
-                background = rounded(card, 18, AppTheme.CARD_BORDER, 1)
+                setPadding(dp(15), dp(11), dp(15), dp(15))
+                background = rounded(Color.rgb(7, 27, 49), 18, Color.rgb(30, 91, 145), 1)
                 elevation = dp(2).toFloat()
             }
-            val params = LinearLayout.LayoutParams(-1, -2)
-            params.bottomMargin = dp(13)
-            content.addView(box, params)
+            val params = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(13) }
+            target.addView(box, params)
             box.addView(TextView(this).apply {
-                text = tr(titleFa, titleEn)
-                textSize = 17f
-                setTextColor(AppTheme.ACCENT)
+                text = "◆  ${tr(titleFa, titleEn)}"
+                textSize = 16f
+                setTextColor(Color.rgb(61, 174, 255))
                 setTypeface(null, android.graphics.Typeface.BOLD)
-                setPadding(0, dp(5), 0, dp(3))
+                setPadding(0, dp(2), 0, dp(7))
             })
             if (subtitleFa != null && subtitleEn != null) box.addView(TextView(this).apply {
                 text = tr(subtitleFa, subtitleEn)
-                textSize = 12f
+                textSize = 11f
                 setTextColor(muted)
                 setPadding(0, 0, 0, dp(8))
             })
             return box
         }
-        fun addTo(target: LinearLayout, view: View) {
-            val params = LinearLayout.LayoutParams(-1, -2)
-            params.bottomMargin = dp(7)
-            target.addView(view, params)
+        fun addTo(target: LinearLayout, view: View, bottom: Int = 7) {
+            target.addView(view, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(bottom) })
+        }
+        fun fieldCell(labelFa: String, labelEn: String, input: EditText): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            addView(label(labelFa, labelEn, 12f))
+            addView(input)
+        }
+        fun pairedRow(target: LinearLayout, left: LinearLayout, right: LinearLayout) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            row.addView(left)
+            row.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(dp(10), 1) })
+            row.addView(right)
+            addTo(target, row, 8)
+        }
+        fun addPageHeading(target: LinearLayout, titleFa: String, titleEn: String, subFa: String, subEn: String) {
+            val header = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(18), dp(18), dp(18))
+                background = AppTheme.heroBackground(this@MainActivity)
+                elevation = dp(3).toFloat()
+            }
+            header.addView(TextView(this).apply {
+                text = "MDF-KAR"
+                textSize = 27f
+                setTextColor(Color.WHITE)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                letterSpacing = 0.035f
+            })
+            header.addView(TextView(this).apply {
+                text = tr(titleFa, titleEn)
+                textSize = 16f
+                setTextColor(Color.rgb(70, 181, 255))
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setPadding(0, dp(3), 0, dp(3))
+            })
+            header.addView(TextView(this).apply {
+                text = tr(subFa, subEn)
+                textSize = 12f
+                setTextColor(AppTheme.TEXT_SECONDARY)
+            })
+            addTo(target, header, 14)
         }
 
-        val dimensionsCard = section("ابعاد ورق و تیغه", "Sheet & saw settings", "اندازه‌ها را بر حسب میلی‌متر وارد کنید", "Enter all dimensions in millimeters")
-        val sheetRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val sheetWidthBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
-        val sheetHeightBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+        // HOME: only the inputs needed to describe a cabinet. Results and advanced options are separate tabs.
+        addPageHeading(homePage, "محاسبه کابینت", "Cabinet calculator", "ابعاد را وارد کنید و نتیجه برش را جداگانه ببینید", "Enter dimensions; view the cutting plan on its own screen")
+        val sheetCard = addSection(homePage, "ابعاد ورق MDF", "MDF sheet dimensions", "همه اندازه‌ها بر حسب میلی‌متر", "All measurements in millimeters")
         sheetWidthInput = field("عرض ورق", "Sheet width", "sheetWidth", "2070")
         sheetHeightInput = field("طول ورق", "Sheet length", "sheetHeight", "2800")
-        sheetWidthBox.addView(label("عرض ورق (میلی‌متر)", "Sheet width (mm)", 12f)); sheetWidthBox.addView(sheetWidthInput)
-        sheetHeightBox.addView(label("طول ورق (میلی‌متر)", "Sheet length (mm)", 12f)); sheetHeightBox.addView(sheetHeightInput)
-        sheetRow.addView(sheetWidthBox)
-        val rowGap = View(this); rowGap.layoutParams = LinearLayout.LayoutParams(dp(10), 1)
-        sheetRow.addView(rowGap); sheetRow.addView(sheetHeightBox)
-        addTo(dimensionsCard, sheetRow)
-        kerfInput = field("عرض تیغه (پیش‌فرض ۳)", "Saw kerf (default 3)", "kerf", "3")
-        addTo(dimensionsCard, label("ضخامت تیغه برش (میلی‌متر)", "Saw kerf (mm)", 12f)); addTo(dimensionsCard, kerfInput)
+        pairedRow(sheetCard, fieldCell("عرض ورق", "Sheet width", sheetWidthInput), fieldCell("طول ورق", "Sheet length", sheetHeightInput))
+        kerfInput = field("عرض تیغه", "Saw kerf", "kerf", "3")
+        addTo(sheetCard, label("ضخامت تیغه برش (میلی‌متر)", "Saw kerf (mm)", 12f))
+        addTo(sheetCard, kerfInput, 1)
 
-        val cabinetCard = section("مشخصات کابینت", "Cabinet specifications", "نوع کابینت و اندازه‌های بدنه", "Cabinet type and carcass dimensions")
+        val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
         cabinetSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
                 if (english) arrayOf("Base cabinet", "Wall cabinet") else arrayOf("کابینت زمینی", "کابینت دیواری"))
             setSelection(prefs().getInt("cabinetType", 0).coerceIn(0, 1))
-            background = rounded(fieldFill, 12, AppTheme.FIELD_BORDER, 1)
+            background = rounded(Color.rgb(12, 37, 63), 12, Color.rgb(39, 105, 159), 1)
             setPadding(dp(8), dp(4), dp(8), dp(4))
         }
-        addTo(cabinetCard, cabinetSpinner)
+        addTo(cabinetCard, cabinetSpinner, 8)
         widthInput = field("عرض کابینت", "Cabinet width", "width", "800")
         heightInput = field("ارتفاع کابینت", "Cabinet height", "height", "720")
         depthInput = field("عمق کابینت", "Cabinet depth", "depth", "560")
-        thicknessInput = field("ضخامت ورق بدنه", "Carcass board thickness", "thickness", "16")
-        shelfInput = field("تعداد طبقه داخلی", "Number of shelves", "shelves", "1")
-        doorInput = field("تعداد در (۰ تا ۲)", "Number of doors (0–2)", "doors", "2")
-        plinthInput = field("ارتفاع پایه/پاخور", "Plinth / leg height", "plinth", "100")
+        thicknessInput = field("ضخامت ورق", "Board thickness", "thickness", "16")
+        shelfInput = field("تعداد طبقه", "Shelves", "shelves", "1")
+        doorInput = field("تعداد در", "Doors", "doors", "2")
+        plinthInput = field("ارتفاع پاخور", "Plinth height", "plinth", "100")
         backThicknessInput = field("ضخامت پشت‌بند", "Back panel thickness", "backThickness", "3")
-        val cabinetFields = listOf(
-            widthInput to Pair("عرض کابینت (میلی‌متر)", "Cabinet width (mm)"),
-            heightInput to Pair("ارتفاع کابینت (میلی‌متر)", "Cabinet height (mm)"),
-            depthInput to Pair("عمق کابینت (میلی‌متر)", "Cabinet depth (mm)"),
-            thicknessInput to Pair("ضخامت ورق بدنه", "Carcass board thickness"),
-            shelfInput to Pair("تعداد طبقه", "Number of shelves"),
-            doorInput to Pair("تعداد در", "Number of doors"),
-            plinthInput to Pair("ارتفاع پاخور", "Plinth height"),
-            backThicknessInput to Pair("ضخامت پشت‌بند", "Back panel thickness")
-        )
-        cabinetFields.chunked(2).forEach { pair ->
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            pair.forEachIndexed { index, item ->
-                val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
-                cell.addView(label(item.second.first, item.second.second, 12f))
-                cell.addView(item.first)
-                row.addView(cell)
-                if (index == 0 && pair.size > 1) row.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(dp(10), 1) })
-            }
-            addTo(cabinetCard, row)
-        }
+        pairedRow(cabinetCard, fieldCell("عرض کابینت (mm)", "Cabinet width (mm)", widthInput), fieldCell("ارتفاع کابینت (mm)", "Cabinet height (mm)", heightInput))
+        pairedRow(cabinetCard, fieldCell("عمق کابینت (mm)", "Cabinet depth (mm)", depthInput), fieldCell("ضخامت ورق بدنه", "Carcass thickness", thicknessInput))
+        pairedRow(cabinetCard, fieldCell("تعداد طبقه", "Shelves", shelfInput), fieldCell("تعداد در (۰ تا ۲)", "Doors (0–2)", doorInput))
+        pairedRow(cabinetCard, fieldCell("ارتفاع پاخور", "Plinth height", plinthInput), fieldCell("ضخامت پشت‌بند", "Back panel", backThicknessInput))
 
-        val optionsCard = section("تنظیمات تکمیلی", "Additional options", "محاسبه پشت‌بند و لبه‌چسبانی PVC", "Back panel and PVC edge-banding options")
+        val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
+            saveSettings()
+            calculate()
+            showPage(1)
+        }.apply {
+            textSize = 16f
+            minHeight = dp(58)
+            background = AppTheme.primaryButton(this@MainActivity)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+        addTo(homePage, calculateButton, 14)
+        val hint = TextView(this).apply {
+            text = tr("تنظیمات PVC و پشت‌بند در بخش «تنظیمات» قرار دارد.", "PVC and back-panel options are under Settings.")
+            textSize = 12f
+            setTextColor(muted)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(4), dp(8), dp(10))
+        }
+        homePage.addView(hint)
+
+        // RESULTS: independent page instead of being appended to the bottom of the input form.
+        addPageHeading(resultsPage, "نتایج محاسبه", "Calculation results", "خلاصه، نقشه چیدمان و فهرست قطعات", "Summary, sheet layout and parts list")
+        val metricsCard = addSection(resultsPage, "خلاصه برش", "Cutting summary")
+        val metricsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        fun metric(value: String, fa: String, en: String): Pair<LinearLayout, TextView> {
+            val valueText = TextView(this).apply { text = value; textSize = 21f; setTextColor(Color.WHITE); setTypeface(null, android.graphics.Typeface.BOLD); gravity = Gravity.CENTER }
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(4), dp(12), dp(4), dp(12))
+                background = rounded(Color.rgb(10, 39, 68), 13, Color.rgb(26, 108, 173), 1)
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(3); marginEnd = dp(3) }
+                addView(valueText)
+                addView(TextView(this@MainActivity).apply { text = tr(fa, en); textSize = 10f; setTextColor(AppTheme.TEXT_SECONDARY); gravity = Gravity.CENTER; setPadding(0, dp(3), 0, 0) })
+            }
+            return box to valueText
+        }
+        val mSheets = metric("—", "تعداد ورق", "Sheets")
+        val mWaste = metric("—", "درصد دورریز", "Waste")
+        val mPieces = metric("—", "تعداد قطعات", "Pieces")
+        metricSheets = mSheets.second
+        metricWaste = mWaste.second
+        metricPieces = mPieces.second
+        metricsRow.addView(mSheets.first)
+        metricsRow.addView(mWaste.first)
+        metricsRow.addView(mPieces.first)
+        addTo(metricsCard, metricsRow, 1)
+        val layoutCard = addSection(resultsPage, "نقشه چیدمان ورق‌ها", "Sheet layout")
+        layoutView = SheetLayoutView().apply { background = rounded(Color.rgb(4, 19, 34), 14, AppTheme.CARD_BORDER, 1) }
+        layoutCard.addView(layoutView, LinearLayout.LayoutParams(-1, dp(270)))
+        val partsCard = addSection(resultsPage, "فهرست قطعات و جزئیات", "Parts list & details")
+        resultText = TextView(this).apply {
+            text = tr("هنوز محاسبه‌ای انجام نشده است. به خانه برگردید و دکمه محاسبه را بزنید.", "No calculation yet. Return Home and tap Calculate.")
+            textSize = 13f
+            setTextColor(ink)
+            setPadding(dp(13), dp(13), dp(13), dp(13))
+            background = rounded(Color.rgb(5, 22, 39), 13, Color.rgb(25, 79, 124), 1)
+        }
+        addTo(partsCard, resultText, 1)
+        addTo(resultsPage, button("ذخیره این پروژه", "Save this project") { saveProjectDialog() }, 8)
+
+        // PROJECTS page is a dedicated destination, not a section far down the form.
+        addPageHeading(projectsPage, "مدیریت پروژه‌ها", "Project manager", "طرح‌ها را ذخیره کنید، باز کنید یا نامشان را تغییر دهید", "Save, reopen or rename your designs")
+        val projectCard = addSection(projectsPage, "پروژه‌های ذخیره‌شده", "Saved projects", "هر پروژه شامل ابعاد و تنظیمات فعلی است", "Each project stores dimensions and current options")
+        addTo(projectCard, button("＋  ذخیره پروژه فعلی", "＋  Save current project") { saveSettings(); saveProjectDialog() }, 10)
+        addTo(projectCard, button("↗  باز کردن پروژه", "↗  Open project") { chooseProjectToLoad() }, 10)
+        addTo(projectCard, button("☷  مدیریت / تغییر نام / حذف", "☷  Manage / rename / delete") { manageProjectsDialog() }, 2)
+        val projectNote = TextView(this).apply {
+            text = tr("پروژه‌ها روی همین دستگاه ذخیره می‌شوند.", "Projects are stored locally on this device.")
+            textSize = 12f; setTextColor(muted); setPadding(dp(3), dp(8), dp(3), dp(3))
+        }
+        projectCard.addView(projectNote)
+
+        // SETTINGS page contains advanced toggles and language switch.
+        addPageHeading(settingsPage, "تنظیمات", "Settings", "گزینه‌های محاسبه و زبان برنامه", "Calculation options and app language")
+        val optionsCard = addSection(settingsPage, "گزینه‌های محاسبه", "Calculation options", "این گزینه‌ها روی نتیجه و برآورد PVC اثر می‌گذارند", "These options affect the estimate")
         includeBackCheck = check("محاسبه پشت‌بند", "Include back panel", "includeBack", true)
-        legsCheck = check("کسر ارتفاع پاخور از بدنه کابینت زمینی", "Subtract plinth from base cabinet body", "legs", true)
+        legsCheck = check("کسر ارتفاع پاخور از بدنه زمینی", "Subtract plinth from base cabinet", "legs", true)
         doorPvcCheck = check("PVC چهار لبه درها", "PVC on all door edges", "doorPvc", true)
         sidePvcCheck = check("PVC لبه جلویی دو پهلو", "PVC on front edges of both sides", "sidePvc", true)
         shelfPvcCheck = check("PVC لبه جلویی کف و طبقه‌ها", "PVC on front edges of bottom and shelves", "shelfPvc", true)
-        listOf(includeBackCheck, legsCheck, doorPvcCheck, sidePvcCheck, shelfPvcCheck).forEach { addTo(optionsCard, it) }
-
-        val projectCard = section("پروژه‌ها", "Projects", "طرح‌ها را ذخیره کنید و بعداً ادامه دهید", "Save designs and continue later")
-        addTo(projectCard, button("ذخیره پروژه", "Save project") { saveProjectDialog() })
-        addTo(projectCard, button("باز کردن پروژه ذخیره‌شده", "Open saved project") { chooseProjectToLoad() })
-        addTo(projectCard, button("مدیریت پروژه‌ها", "Manage projects") { manageProjectsDialog() })
-
-        val resultCard = section("نتیجه و چیدمان برش", "Results & cutting layout", "ابتدا محاسبه را اجرا کنید تا نقشه و فهرست قطعات نمایش داده شود", "Calculate to display the layout and parts list")
-        val calculateButton = button("محاسبه قطعات و نمایش نتیجه", "Calculate parts & show results") {
+        listOf(includeBackCheck, legsCheck, doorPvcCheck, sidePvcCheck, shelfPvcCheck).forEach { addTo(optionsCard, it, 5) }
+        val languageCard = addSection(settingsPage, "زبان برنامه", "App language")
+        addTo(languageCard, button(if (english) "تغییر به فارسی" else "Switch to English", if (english) "Switch to Persian" else "تغییر به انگلیسی") {
             saveSettings()
-            calculate()
-            scroll.post { scroll.smoothScrollTo(0, resultCard.top) }
-        }.apply {
-            textSize = 16f
-            minHeight = dp(54)
-            background = AppTheme.primaryButton(this@MainActivity)
-        }
-        addTo(resultCard, calculateButton)
-        layoutView = SheetLayoutView().apply { background = rounded(card, 15, AppTheme.CARD_BORDER, 1) }
-        addTo(resultCard, label("نقشه چیدمان ورق", "Sheet cutting layout", 14f))
-        resultCard.addView(layoutView, LinearLayout.LayoutParams(-1, dp(230)))
-        resultText = TextView(this).apply {
-            text = tr("ابعاد را وارد کنید و محاسبه را بزنید.", "Enter dimensions and calculate.")
-            textSize = 14f
-            setTextColor(ink)
-            setPadding(dp(4), dp(12), dp(4), dp(12))
-            background = rounded(fieldFill, 12, AppTheme.FIELD_BORDER, 1)
-        }
-        addTo(resultCard, resultText)
-        addTo(resultCard, TextView(this).apply {
-            text = tr("توجه: این چیدمان تخمینی است؛ پیش از برش واقعی، ابعاد، جهت رگه، لبه‌چسبانی و تلرانس دستگاه را بررسی کنید.", "Warning: estimated layout only. Verify dimensions, grain direction, edge banding and machine tolerances before cutting.")
-            textSize = 11f
-            setTextColor(muted)
-            setPadding(dp(3), dp(8), dp(3), dp(4))
+            english = !english
+            prefs().edit().putBoolean("english", english).apply()
+            buildScreen()
+        }, 2)
+        val aboutCard = addSection(settingsPage, "درباره MDF-KAR", "About MDF-KAR")
+        aboutCard.addView(TextView(this).apply {
+            text = tr("ابزار برآورد قطعات کابینت و چیدمان تقریبی برش ورق MDF. پیش از برش واقعی، اندازه‌ها را بررسی کنید.", "Cabinet part estimator and approximate MDF sheet cutting planner. Verify all measurements before cutting.")
+            textSize = 12f; setTextColor(muted); setPadding(0, dp(5), 0, dp(3))
         })
 
-        // Fixed bottom navigation gives the screen the same clear app-like hierarchy as the reference.
-        val nav = LinearLayout(this).apply {
+        // Fixed four-item navigation. Each tab changes page; it never scrolls to a distant section.
+        nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(6), dp(7), dp(6), dp(7))
+            setPadding(dp(8), dp(7), dp(8), dp(7))
             background = AppTheme.navBackground(this@MainActivity)
-            elevation = dp(10).toFloat()
+            elevation = dp(12).toFloat()
         }
-        fun navItem(icon: String, fa: String, en: String, target: View, isActive: Boolean = false) {
+        fun navItem(icon: String, fa: String, en: String, index: Int) {
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(3), dp(3), dp(3), dp(3))
-                layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                setPadding(dp(3), dp(6), dp(3), dp(6))
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(2); marginEnd = dp(2) }
                 isClickable = true
                 isFocusable = true
-                setOnClickListener {
-                    val y = target.top - dp(8)
-                    scroll.smoothScrollTo(0, y.coerceAtLeast(0))
-                }
+                setOnClickListener { showPage(index) }
             }
-            item.addView(TextView(this).apply {
-                text = icon
-                textSize = 20f
-                gravity = Gravity.CENTER
-                setTextColor(if (isActive) AppTheme.ACCENT else muted)
-            })
-            item.addView(TextView(this).apply {
-                text = tr(fa, en)
-                textSize = 10f
-                gravity = Gravity.CENTER
-                setTextColor(if (isActive) AppTheme.ACCENT else muted)
-            })
+            item.addView(TextView(this).apply { text = icon; textSize = 21f; gravity = Gravity.CENTER; setTextColor(muted) })
+            item.addView(TextView(this).apply { text = tr(fa, en); textSize = 10f; gravity = Gravity.CENTER; setTextColor(muted); setPadding(0, dp(2), 0, 0) })
             nav.addView(item)
         }
-        navItem("⌂", "خانه", "Home", hero, true)
-        navItem("▤", "نتایج", "Results", resultCard)
-        navItem("▣", "پروژه‌ها", "Projects", projectCard)
-        navItem("⚙", "تنظیمات", "Settings", optionsCard)
+        navItem("⌂", "خانه", "Home", 0)
+        navItem("▤", "نتایج", "Results", 1)
+        navItem("▣", "پروژه‌ها", "Projects", 2)
+        navItem("⚙", "تنظیمات", "Settings", 3)
         root.addView(nav, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
+        showPage(0)
     }
-
 
     private fun projectsDirectory(): File = File(filesDir, "projects").apply { if (!exists()) mkdirs() }
 
@@ -671,8 +707,11 @@ class MainActivity : Activity() {
         val boardArea = boardParts.sumOf { it.width * it.height * it.quantity }
         val sheetArea = sw * sh
         val sheetCount = layout.sheetCount
+        metricSheets.text = if (english) sheetCount.toString() else faDigits(sheetCount.toString())
         val unusedArea = max(0.0, sheetCount * sheetArea - boardArea)
         val wastePercent = if (sheetCount > 0) unusedArea / (sheetCount * sheetArea) * 100.0 else 0.0
+        metricWaste.text = if (english) "${fmt(wastePercent)}%" else faDigits("${fmt(wastePercent)}٪")
+        metricPieces.text = if (english) layout.placements.size.toString() else faDigits(layout.placements.size.toString())
         val backArea = if (includeBackCheck.isChecked) w * bodyH / 1_000_000.0 else 0.0
 
         var pvcMeters = 0.0
