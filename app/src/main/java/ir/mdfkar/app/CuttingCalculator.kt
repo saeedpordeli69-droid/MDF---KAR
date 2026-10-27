@@ -3,7 +3,7 @@ package ir.mdfkar.app
 import kotlin.math.max
 import kotlin.math.min
 
- data class CuttingPart(
+data class CuttingPart(
     val name: String,
     val width: Double,
     val height: Double,
@@ -24,48 +24,50 @@ data class SheetPlacement(
 data class CuttingPackResult(val placements: List<SheetPlacement>, val sheetCount: Int)
 
 /**
- * Multi-pass shelf/row optimizer for planning. It tries several part orders and
- * chooses the layout using the fewest sheets, then the lowest row-space waste.
- * This is a planning heuristic, not a certified guillotine/CNC optimizer.
+ * Multi-pass MaxRects-style planner.
+ *
+ * Unlike a shelf-only planner, it tracks rectangular free areas left between parts.
+ * It tries multiple orderings and prefers the layout with the fewest sheets first.
+ * This is a planning heuristic, not a certified CNC / guillotine optimizer.
  */
 object CuttingCalculator {
-    private data class Row(var y: Double, var height: Double, var x: Double)
-    private data class Layout(val result: CuttingPackResult, val rowWaste: Double, val totalRowHeight: Double)
-    private data class Fit(
+    private data class Rect(val x: Double, val y: Double, val w: Double, val h: Double)
+    private data class Candidate(
         val sheet: Int,
-        val row: Row,
-        val width: Double,
-        val height: Double,
+        val free: Rect,
+        val w: Double,
+        val h: Double,
         val rotated: Boolean,
-        val heightSlack: Double,
-        val widthSlack: Double
+        val shortSide: Double,
+        val longSide: Double,
+        val areaWaste: Double
     )
-    private data class NewRowFit(
-        val sheet: Int,
-        val y: Double,
-        val width: Double,
-        val height: Double,
-        val rotated: Boolean,
-        val verticalSlack: Double
-    )
+    private data class Layout(val result: CuttingPackResult, val freeArea: Double)
 
-    fun packParts(parts: List<CuttingPart>, sheetW: Double, sheetH: Double, kerf: Double): CuttingPackResult {
+    fun packParts(
+        parts: List<CuttingPart>,
+        sheetW: Double,
+        sheetH: Double,
+        kerf: Double
+    ): CuttingPackResult {
         if (sheetW <= 0.0 || sheetH <= 0.0) return CuttingPackResult(emptyList(), 0)
+
         val expanded = mutableListOf<CuttingPart>()
         parts.filter { it.quantity > 0 && it.width > 0.0 && it.height > 0.0 }.forEach { part ->
             repeat(part.quantity) { expanded += part.copy(quantity = 1) }
         }
         if (expanded.isEmpty()) return CuttingPackResult(emptyList(), 0)
 
-        // Different orderings often produce different shelf layouts. Try each and
-        // retain the best valid result instead of relying on one area-only sort.
+        // Reject no part silently: oversized pieces remain visible as overflow placements,
+        // so the calling screen can report them to the user.
         val orders = listOf(
             expanded.sortedWith(compareByDescending<CuttingPart> { area(it) }.thenByDescending { max(it.width, it.height) }),
-            expanded.sortedWith(compareByDescending<CuttingPart> { max(it.width, it.height) }.thenByDescending { area(it) }),
             expanded.sortedWith(compareByDescending<CuttingPart> { max(it.width, it.height) }.thenByDescending { min(it.width, it.height) }),
-            expanded.sortedWith(compareByDescending<CuttingPart> { it.height }.thenByDescending { it.width }),
+            expanded.sortedWith(compareByDescending<CuttingPart> { min(it.width, it.height) }.thenByDescending { area(it) }),
             expanded.sortedWith(compareByDescending<CuttingPart> { it.width }.thenByDescending { it.height }),
-            expanded.sortedWith(compareByDescending<CuttingPart> { it.width + it.height }.thenByDescending { area(it) })
+            expanded.sortedWith(compareByDescending<CuttingPart> { it.height }.thenByDescending { it.width }),
+            expanded.sortedWith(compareByDescending<CuttingPart> { it.width + it.height }.thenByDescending { area(it) }),
+            expanded.sortedWith(compareBy<CuttingPart> { min(it.width, it.height) }.thenByDescending { area(it) })
         )
 
         var best: Layout? = null
@@ -76,21 +78,29 @@ object CuttingCalculator {
         return best!!.result
     }
 
-    private fun area(part: CuttingPart): Double = part.width * part.height
+    private fun area(p: CuttingPart) = p.width * p.height
 
-    private fun isBetter(candidate: Layout, current: Layout): Boolean {
-        if (candidate.result.sheetCount != current.result.sheetCount) {
-            return candidate.result.sheetCount < current.result.sheetCount
+    private fun isBetter(a: Layout, b: Layout): Boolean {
+        if (a.result.sheetCount != b.result.sheetCount) {
+            return a.result.sheetCount < b.result.sheetCount
         }
+        // With sheet count tied, prefer less remaining free area, then fewer overflow parts.
         val eps = 0.0001
-        if (candidate.rowWaste < current.rowWaste - eps) return true
-        if (candidate.rowWaste > current.rowWaste + eps) return false
-        return candidate.totalRowHeight < current.totalRowHeight - eps
+        if (a.freeArea < b.freeArea - eps) return true
+        if (a.freeArea > b.freeArea + eps) return false
+        return a.result.placements.count { it.width > 0 && it.height > 0 } >
+            b.result.placements.count { it.width > 0 && it.height > 0 }
     }
 
-    private fun packInOrder(parts: List<CuttingPart>, sheetW: Double, sheetH: Double, kerf: Double): Layout {
-        val rowsBySheet = mutableListOf<MutableList<Row>>()
+    private fun packInOrder(
+        parts: List<CuttingPart>,
+        sheetW: Double,
+        sheetH: Double,
+        kerf: Double
+    ): Layout {
+        val freeBySheet = mutableListOf<MutableList<Rect>>()
         val placements = mutableListOf<SheetPlacement>()
+        val sheetArea = sheetW * sheetH
 
         for (part in parts) {
             val orientations = mutableListOf<Triple<Double, Double, Boolean>>()
@@ -102,106 +112,133 @@ object CuttingCalculator {
                 orientations += Triple(part.height, part.width, true)
             }
 
-            // A piece that cannot fit even on a fresh sheet is kept visible as an
-            // overflow marker; MainActivity also warns and blocks this situation.
             if (orientations.isEmpty()) {
-                val newIndex = rowsBySheet.size
-                rowsBySheet += mutableListOf(Row(0.0, min(part.height, sheetH), min(part.width, sheetW)))
-                placements += SheetPlacement(part.name, 0.0, 0.0, part.width, part.height, false, newIndex)
+                val index = freeBySheet.size
+                freeBySheet += mutableListOf()
+                placements += SheetPlacement(part.name, 0.0, 0.0, part.width, part.height, false, index)
                 continue
             }
 
-            // 1) Best-fit existing row, prioritizing the earliest sheet.
-            // Do not place a part on sheet 2 while a valid row fit exists on sheet 1.
-            var bestFit: Fit? = null
-            for (sheetIndex in rowsBySheet.indices) {
-                var bestOnThisSheet: Fit? = null
-                for (row in rowsBySheet[sheetIndex]) {
-                    val remaining = sheetW - row.x
+            var best: Candidate? = null
+            // Critical rule: search every existing sheet before allocating another one.
+            for (sheet in freeBySheet.indices) {
+                for (free in freeBySheet[sheet]) {
                     for ((w, h, rotated) in orientations) {
-                        if (w <= remaining + 0.0001 && h <= row.height + 0.0001) {
-                            val fit = Fit(
-                                sheetIndex, row, w, h, rotated,
-                                row.height - h,
-                                remaining - w
+                        // Reserve kerf on the right/bottom of each part unless it touches the sheet edge.
+                        val reserveW = w + if (w < sheetW) kerf else 0.0
+                        val reserveH = h + if (h < sheetH) kerf else 0.0
+                        if (reserveW <= free.w && reserveH <= free.h) {
+                            val dw = free.w - reserveW
+                            val dh = free.h - reserveH
+                            val candidate = Candidate(
+                                sheet, free, w, h, rotated,
+                                min(dw, dh), max(dw, dh), free.w * free.h - w * h
                             )
-                            if (bestOnThisSheet == null || compareFit(fit, bestOnThisSheet!!) < 0) {
-                                bestOnThisSheet = fit
-                            }
+                            if (best == null || compareCandidate(candidate, best!!) < 0) best = candidate
                         }
                     }
                 }
-                if (bestOnThisSheet != null) {
-                    bestFit = bestOnThisSheet
-                    break
-                }
-            }
-            if (bestFit != null) {
-                val fit = bestFit!!
-                placements += SheetPlacement(part.name, fit.row.x, fit.row.y, fit.width, fit.height, fit.rotated, fit.sheet)
-                fit.row.x += fit.width + kerf
-                continue
             }
 
-            // 2) Otherwise try a new row on the earliest existing sheet first.
-            // Only move to the next sheet if no allowed orientation fits vertically
-            // on the earlier sheet.
-            var bestNewRow: NewRowFit? = null
-            for (sheetIndex in rowsBySheet.indices) {
-                val rows = rowsBySheet[sheetIndex]
-                val nextY = if (rows.isEmpty()) 0.0 else rows.maxOf { it.y + it.height } + kerf
-                var bestOnThisSheet: NewRowFit? = null
+            if (best == null) {
+                // Only now create a new sheet, and initialize its full free rectangle.
+                val index = freeBySheet.size
+                freeBySheet += mutableListOf(Rect(0.0, 0.0, sheetW, sheetH))
                 for ((w, h, rotated) in orientations) {
-                    if (w <= sheetW + 0.0001 && nextY + h <= sheetH + 0.0001) {
-                        val fit = NewRowFit(sheetIndex, nextY, w, h, rotated, sheetH - (nextY + h))
-                        if (bestOnThisSheet == null || compareNewRow(fit, bestOnThisSheet!!) < 0) {
-                            bestOnThisSheet = fit
-                        }
-                    }
+                    val reserveW = w + if (w < sheetW) kerf else 0.0
+                    val reserveH = h + if (h < sheetH) kerf else 0.0
+                    val dw = sheetW - reserveW
+                    val dh = sheetH - reserveH
+                    val candidate = Candidate(
+                        index, Rect(0.0, 0.0, sheetW, sheetH), w, h, rotated,
+                        min(dw, dh), max(dw, dh), sheetArea - w * h
+                    )
+                    if (best == null || compareCandidate(candidate, best!!) < 0) best = candidate
                 }
-                if (bestOnThisSheet != null) {
-                    bestNewRow = bestOnThisSheet
-                    break
-                }
-            }
-            if (bestNewRow != null) {
-                val fit = bestNewRow!!
-                val row = Row(fit.y, fit.height, fit.width + kerf)
-                rowsBySheet[fit.sheet] += row
-                placements += SheetPlacement(part.name, 0.0, fit.y, fit.width, fit.height, fit.rotated, fit.sheet)
-                continue
             }
 
-            // 3) No existing sheet can fit it: start a new sheet.
-            val choice = orientations.minWithOrNull(
-                compareBy<Triple<Double, Double, Boolean>> { sheetH - it.second }
-                    .thenBy { sheetW - it.first }
-            )!!
-            val newIndex = rowsBySheet.size
-            rowsBySheet += mutableListOf(Row(0.0, choice.second, choice.first + kerf))
-            placements += SheetPlacement(part.name, 0.0, 0.0, choice.first, choice.second, choice.third, newIndex)
+            val chosen = best!!
+            placements += SheetPlacement(
+                part.name, chosen.free.x, chosen.free.y,
+                chosen.w, chosen.h, chosen.rotated, chosen.sheet
+            )
+            val reserveW = chosen.w + if (chosen.w < sheetW) kerf else 0.0
+            val reserveH = chosen.h + if (chosen.h < sheetH) kerf else 0.0
+            val used = Rect(chosen.free.x, chosen.free.y, reserveW, reserveH)
+            val freeRects = freeBySheet[chosen.sheet]
+            splitFreeRects(freeRects, used)
+            pruneFreeRects(freeRects)
         }
 
-        val totalRowHeight = rowsBySheet.sumOf { rows -> rows.sumOf { it.height } }
-        val usedPieceArea = placements.sumOf { it.width * it.height }
-        val occupiedRowArea = totalRowHeight * sheetW
-        val rowWaste = max(0.0, occupiedRowArea - usedPieceArea)
-        return Layout(CuttingPackResult(placements, rowsBySheet.size), rowWaste, totalRowHeight)
+        val sheetCount = freeBySheet.size
+        val placedArea = placements.sumOf { it.width * it.height }
+        val freeArea = max(0.0, sheetCount * sheetArea - placedArea)
+        return Layout(CuttingPackResult(placements, sheetCount), freeArea)
     }
 
-    private fun compareFit(a: Fit, b: Fit): Int {
-        val heightCompare = a.heightSlack.compareTo(b.heightSlack)
-        if (heightCompare != 0) return heightCompare
-        val widthCompare = a.widthSlack.compareTo(b.widthSlack)
-        if (widthCompare != 0) return widthCompare
+    private fun compareCandidate(a: Candidate, b: Candidate): Int {
+        val short = a.shortSide.compareTo(b.shortSide)
+        if (short != 0) return short
+        val long = a.longSide.compareTo(b.longSide)
+        if (long != 0) return long
+        val area = a.areaWaste.compareTo(b.areaWaste)
+        if (area != 0) return area
+        // Prefer using the earliest sheet when the fit quality is otherwise identical.
         return a.sheet.compareTo(b.sheet)
     }
 
-    private fun compareNewRow(a: NewRowFit, b: NewRowFit): Int {
-        val verticalCompare = a.verticalSlack.compareTo(b.verticalSlack)
-        if (verticalCompare != 0) return verticalCompare
-        val heightCompare = b.height.compareTo(a.height) // prefer taller rows when vertical slack ties
-        if (heightCompare != 0) return heightCompare
-        return a.sheet.compareTo(b.sheet)
+    private fun splitFreeRects(freeRects: MutableList<Rect>, used: Rect) {
+        val updated = mutableListOf<Rect>()
+        val iterator = freeRects.toList()
+        for (free in iterator) {
+            if (!intersects(free, used)) continue
+            freeRects.remove(free)
+
+            if (used.x > free.x && used.x < free.x + free.w) {
+                updated += Rect(free.x, free.y, used.x - free.x, free.h)
+            }
+            if (used.x + used.w < free.x + free.w) {
+                updated += Rect(used.x + used.w, free.y, free.x + free.w - (used.x + used.w), free.h)
+            }
+            if (used.y > free.y && used.y < free.y + free.h) {
+                updated += Rect(free.x, free.y, free.w, used.y - free.y)
+            }
+            if (used.y + used.h < free.y + free.h) {
+                updated += Rect(free.x, used.y + used.h, free.w, free.y + free.h - (used.y + used.h))
+            }
+        }
+        freeRects.addAll(updated.filter { it.w > 0.0001 && it.h > 0.0001 })
     }
+
+    private fun intersects(a: Rect, b: Rect): Boolean {
+        return b.x < a.x + a.w && b.x + b.w > a.x &&
+            b.y < a.y + a.h && b.y + b.h > a.y
+    }
+
+    private fun pruneFreeRects(rects: MutableList<Rect>) {
+        var i = 0
+        while (i < rects.size) {
+            var removedI = false
+            var j = i + 1
+            while (j < rects.size) {
+                val a = rects[i]
+                val b = rects[j]
+                if (contains(a, b)) {
+                    rects.removeAt(j)
+                } else if (contains(b, a)) {
+                    rects.removeAt(i)
+                    removedI = true
+                    break
+                } else {
+                    j++
+                }
+            }
+            if (!removedI) i++ 
+        }
+    }
+
+    private fun contains(a: Rect, b: Rect): Boolean =
+        b.x >= a.x - 0.0001 && b.y >= a.y - 0.0001 &&
+            b.x + b.w <= a.x + a.w + 0.0001 &&
+            b.y + b.h <= a.y + a.h + 0.0001
 }
