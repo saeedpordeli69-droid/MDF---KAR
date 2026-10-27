@@ -177,14 +177,17 @@ object CuttingCalculator {
     }
 
     private fun compareCandidate(a: Candidate, b: Candidate): Int {
+        // Priority 1: use the earliest already-open sheet whenever the part fits.
+        // This prevents moving a part to a later sheet merely to preserve a prettier offcut.
+        val sheet = a.sheet.compareTo(b.sheet)
+        if (sheet != 0) return sheet
+
+        // Priority 2: within that sheet, choose the fit that leaves the most useful shape.
         val short = a.shortSide.compareTo(b.shortSide)
         if (short != 0) return short
         val long = a.longSide.compareTo(b.longSide)
         if (long != 0) return long
-        val area = a.areaWaste.compareTo(b.areaWaste)
-        if (area != 0) return area
-        // Prefer using the earliest sheet when the fit quality is otherwise identical.
-        return a.sheet.compareTo(b.sheet)
+        return a.areaWaste.compareTo(b.areaWaste)
     }
 
     private fun splitFreeRects(freeRects: MutableList<Rect>, used: Rect) {
