@@ -165,7 +165,7 @@ class MainActivity : Activity() {
             setSingleLine(true)
             setTextColor(ink)
             setHintTextColor(muted)
-            setPadding(16, 8, 16, 8)
+            setPadding(12, 5, 12, 5)
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             textAlignment = View.TEXT_ALIGNMENT_VIEW_START
             background = rounded(fieldFill, 12, Color.rgb(56, 73, 98), 1)
@@ -183,7 +183,7 @@ class MainActivity : Activity() {
             textSize = size
             setTextColor(if (size >= 18f) Color.rgb(106, 170, 255) else ink)
             if (size >= 18f) setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(0, 12, 0, 8)
+            setPadding(0, 7, 0, 4)
         }
     }
 
@@ -193,7 +193,7 @@ class MainActivity : Activity() {
             isAllCaps = false
             setTextColor(Color.WHITE)
             background = rounded(green, 14, Color.rgb(91, 157, 255), 1)
-            setPadding(12, 10, 12, 10)
+            setPadding(10, 6, 10, 6)
             setOnClickListener { action() }
         }
     }
@@ -210,7 +210,7 @@ class MainActivity : Activity() {
 
     internal fun addField(view: View) {
         val lp = LinearLayout.LayoutParams(-1, -2)
-        lp.bottomMargin = 7
+        lp.bottomMargin = dp(4)
         content.addView(view, lp)
     }
 
