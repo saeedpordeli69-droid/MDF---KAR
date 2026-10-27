@@ -60,6 +60,7 @@ class MainActivity : Activity() {
     private lateinit var doorInput: EditText
     private lateinit var plinthInput: EditText
     private lateinit var backThicknessInput: EditText
+    private lateinit var cabinetQuantityInput: EditText
     private lateinit var sheetWidthInput: EditText
     private lateinit var sheetHeightInput: EditText
     private lateinit var kerfInput: EditText
@@ -198,7 +199,7 @@ class MainActivity : Activity() {
         fun makePage(): LinearLayout {
             val pageContent = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(16), dp(12), dp(16), dp(28))
+                setPadding(dp(16), dp(28), dp(16), dp(28))
             }
             val scroll = ScrollView(this).apply {
                 clipToPadding = false
@@ -358,11 +359,29 @@ class MainActivity : Activity() {
 
         val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
         cabinetSpinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                if (english) arrayOf("Base cabinet", "Wall cabinet") else arrayOf("کابینت زمینی", "کابینت دیواری"))
+            val cabinetTypes = if (english) arrayOf("Base cabinet", "Wall cabinet") else arrayOf("کابینت زمینی", "کابینت دیواری")
+            adapter = object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_spinner_item, cabinetTypes) {
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                    return (super.getView(position, convertView, parent) as TextView).apply {
+                        setTextColor(AppTheme.TEXT)
+                        textSize = 15f
+                        setPadding(dp(10), dp(8), dp(10), dp(8))
+                    }
+                }
+                override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                    return (super.getDropDownView(position, convertView, parent) as TextView).apply {
+                        setTextColor(AppTheme.TEXT)
+                        textSize = 15f
+                        setBackgroundColor(Color.rgb(7, 24, 43))
+                        setPadding(dp(16), dp(12), dp(16), dp(12))
+                    }
+                }
+            }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
             setSelection(prefs().getInt("cabinetType", 0).coerceIn(0, 1))
             background = rounded(Color.rgb(12, 37, 63), 12, Color.rgb(39, 105, 159), 1)
             setPadding(dp(8), dp(4), dp(8), dp(4))
+            dropDownVerticalOffset = dp(4)
+            dropDownWidth = ViewGroup.LayoutParams.MATCH_PARENT
         }
         addTo(cabinetCard, cabinetSpinner, 8)
         widthInput = field("عرض کابینت", "Cabinet width", "width", "۸۰۰")
@@ -373,10 +392,13 @@ class MainActivity : Activity() {
         doorInput = field("تعداد در", "Doors", "doors", "۲")
         plinthInput = field("ارتفاع پاخور", "Plinth height", "plinth", "۱۰۰")
         backThicknessInput = field("ضخامت پشت‌بند", "Back panel thickness", "backThickness", "۳")
+        cabinetQuantityInput = field("تعداد کابینت مشابه", "Number of identical cabinets", "cabinetQuantity", "۱")
         pairedRow(cabinetCard, fieldCell("عرض کابینت (mm)", "Cabinet width (mm)", widthInput), fieldCell("ارتفاع کابینت (mm)", "Cabinet height (mm)", heightInput))
         pairedRow(cabinetCard, fieldCell("عمق کابینت (mm)", "Cabinet depth (mm)", depthInput), fieldCell("ضخامت ورق بدنه", "Carcass thickness", thicknessInput))
         pairedRow(cabinetCard, fieldCell("تعداد طبقه", "Shelves", shelfInput), fieldCell("تعداد در (۰ تا ۲)", "Doors (0–2)", doorInput))
         pairedRow(cabinetCard, fieldCell("ارتفاع پاخور", "Plinth height", plinthInput), fieldCell("ضخامت پشت‌بند", "Back panel", backThicknessInput))
+        addTo(cabinetCard, label("تعداد کابینت با همین مشخصات", "Number of cabinets with these same dimensions", 12f))
+        addTo(cabinetCard, cabinetQuantityInput, 8)
 
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
@@ -535,6 +557,7 @@ class MainActivity : Activity() {
             put("doors", doorInput.text.toString())
             put("plinth", plinthInput.text.toString())
             put("backThickness", backThicknessInput.text.toString())
+            put("cabinetQuantity", cabinetQuantityInput.text.toString())
             put("sheetWidth", sheetWidthInput.text.toString())
             put("sheetHeight", sheetHeightInput.text.toString())
             put("kerf", kerfInput.text.toString())
@@ -720,6 +743,7 @@ class MainActivity : Activity() {
             putText("doors", doorInput)
             putText("plinth", plinthInput)
             putText("backThickness", backThicknessInput)
+            putText("cabinetQuantity", cabinetQuantityInput)
             putText("sheetWidth", sheetWidthInput)
             putText("sheetHeight", sheetHeightInput)
             putText("kerf", kerfInput)
@@ -779,18 +803,19 @@ class MainActivity : Activity() {
         val doors = number(doorInput.text.toString())?.toInt()
         val plinthInputValue = number(plinthInput.text.toString())
         val backT = number(backThicknessInput.text.toString())
+        val cabinetQuantity = number(cabinetQuantityInput.text.toString())?.toInt()
         val sw = number(sheetWidthInput.text.toString())
         val sh = number(sheetHeightInput.text.toString())
         val kerf = number(kerfInput.text.toString())
 
         if (w == null || h == null || d == null || t == null || shelves == null ||
-            doors == null || plinthInputValue == null || backT == null || sw == null ||
+            doors == null || plinthInputValue == null || backT == null || cabinetQuantity == null || sw == null ||
             sh == null || kerf == null || w <= 0 || h <= 0 || d <= 0 || t <= 0 ||
-            shelves !in 0..30 || doors !in 0..2 || plinthInputValue < 0 || backT < 0 ||
+            shelves !in 0..30 || doors !in 0..2 || plinthInputValue < 0 || backT < 0 || cabinetQuantity !in 1..100 ||
             sw <= 0 || sh <= 0 || kerf < 0) {
             resultText.text = tr(
-                "لطفاً ابعاد مثبت وارد کنید. تعداد طبقه باید ۰ تا ۳۰ و تعداد در ۰ تا ۲ باشد.",
-                "Enter valid positive dimensions. Shelves must be 0–30 and doors 0–2."
+                "ابعاد را معتبر وارد کنید. تعداد طبقه ۰ تا ۳۰، تعداد در ۰ تا ۲ و تعداد کابینت ۱ تا ۱۰۰ باشد.",
+                "Enter valid dimensions. Shelves: 0–30, doors: 0–2, cabinet quantity: 1–100."
             )
             return
         }
@@ -824,7 +849,8 @@ class MainActivity : Activity() {
             if (doorW > 0 && doorH > 0) parts += Part(tr("درب", "Door"), doorW, doorH, doors)
         }
 
-        val boardParts = parts.filter { it.name != tr("پشت‌بند", "Back panel") }
+        val multipliedParts = parts.map { it.copy(quantity = it.quantity * cabinetQuantity) }
+        val boardParts = multipliedParts.filter { it.name != tr("پشت‌بند", "Back panel") }
         val layout = packParts(boardParts, sw, sh, kerf)
         latestPlacements = layout.placements
         latestSheetW = sw
@@ -839,19 +865,19 @@ class MainActivity : Activity() {
         val wastePercent = if (sheetCount > 0) unusedArea / (sheetCount * sheetArea) * 100.0 else 0.0
         metricWaste.text = if (english) "${fmt(wastePercent)}%" else faDigits("${fmt(wastePercent)}٪")
         metricPieces.text = if (english) layout.placements.size.toString() else faDigits(layout.placements.size.toString())
-        val backArea = if (includeBackCheck.isChecked) w * bodyH / 1_000_000.0 else 0.0
+        val backArea = if (includeBackCheck.isChecked) w * bodyH * cabinetQuantity / 1_000_000.0 else 0.0
 
         var pvcMeters = 0.0
         if (doorPvcCheck.isChecked && doors > 0) {
             val doorW = (w - 3.0) / doors
             val doorH = bodyH - 3.0
-            pvcMeters += doors * 2 * (doorW + doorH) / 1000.0
+            pvcMeters += cabinetQuantity * doors * 2 * (doorW + doorH) / 1000.0
         }
-        if (sidePvcCheck.isChecked) pvcMeters += 2 * bodyH / 1000.0
-        if (shelfPvcCheck.isChecked) pvcMeters += (1 + shelves) * innerW / 1000.0
+        if (sidePvcCheck.isChecked) pvcMeters += cabinetQuantity * 2 * bodyH / 1000.0
+        if (shelfPvcCheck.isChecked) pvcMeters += cabinetQuantity * (1 + shelves) * innerW / 1000.0
 
         partsList.removeAllViews()
-        parts.forEachIndexed { index, part ->
+        multipliedParts.forEachIndexed { index, part ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -889,6 +915,7 @@ class MainActivity : Activity() {
         }
         val summaryFa = """
             جزئیات برش:
+            تعداد کابینت مشابه: $cabinetQuantity
             ورق بدنه: ${sheetCount} عدد (${fmt(sw)} × ${fmt(sh)} میلی‌متر)
             مساحت قطعات بدنه: ${fmt(boardArea / 1_000_000.0)} مترمربع
             دورریز تخمینی بر اساس مساحت: ${fmt(wastePercent)}٪
@@ -901,6 +928,7 @@ class MainActivity : Activity() {
         """.trimIndent()
         val summaryEn = """
             Cutting details:
+            Identical cabinets: $cabinetQuantity
             Carcass sheets: $sheetCount (${fmt(sw)} × ${fmt(sh)} mm)
             Carcass part area: ${fmt(boardArea / 1_000_000.0)} m²
             Estimated area-based waste: ${fmt(wastePercent)}%
