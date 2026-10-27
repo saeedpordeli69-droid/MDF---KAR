@@ -465,6 +465,39 @@ class MainActivity : Activity() {
         return s.map { if (it in '0'..'9') map[it - '0'] else it }.joinToString("")
     }
 
+    /** Stops the layout before an oversized part can be drawn outside the sheet. */
+    internal fun rejectPartsThatDoNotFit(parts: List<CuttingPart>, sheetW: Double, sheetH: Double): Boolean {
+        val invalid = parts.filter { part ->
+            val normalFits = part.width <= sheetW && part.height <= sheetH
+            val rotatedFits = part.rotate && part.height <= sheetW && part.width <= sheetH
+            !normalFits && !rotatedFits
+        }
+        if (invalid.isEmpty()) return false
+
+        latestPlacements = emptyList()
+        latestSheetCount = 0
+        selectedSheetIndex = 0
+        updateSheetNavigation()
+        if (::layoutView.isInitialized) layoutView.invalidate()
+        if (::metricSheets.isInitialized) metricSheets.text = if (english) "0" else "۰"
+        if (::metricPieces.isInitialized) metricPieces.text = if (english) "0" else "۰"
+        if (::metricWaste.isInitialized) metricWaste.text = if (english) "—" else "—"
+
+        val details = invalid.take(8).joinToString("\n") { part ->
+            val dimensions = "${fmt(part.width)} × ${fmt(part.height)} mm"
+            if (english) "• ${part.name}: $dimensions" else "• ${part.name}: ${faDigits(dimensions)} میلی‌متر"
+        }
+        val more = if (invalid.size > 8) {
+            if (english) "\n…and ${invalid.size - 8} more part types." else "\nو ${faDigits((invalid.size - 8).toString())} مورد دیگر."
+        } else ""
+        resultText.text = if (english) {
+            "Some parts are larger than the sheet and cannot be placed:\n$details$more\n\nIncrease sheet dimensions or review the part dimensions. No cutting layout was generated."
+        } else {
+            "بعضی قطعات از ابعاد ورق بزرگ‌تر هستند و روی آن جا نمی‌شوند:\n$details$more\n\nابعاد ورق یا ابعاد قطعات را بررسی کنید. نقشهٔ برش ساخته نشد."
+        }
+        return true
+    }
+
     internal fun calculate() {
         if (orderCabinets.isNotEmpty() || customParts.isNotEmpty()) {
             calculateMultiCabinetOrder()
@@ -526,6 +559,7 @@ class MainActivity : Activity() {
 
         val multipliedParts = parts.map { it.copy(quantity = it.quantity * cabinetQuantity) }
         val boardParts = multipliedParts.filter { it.name != tr("پشت‌بند", "Back panel") }
+        if (rejectPartsThatDoNotFit(boardParts, sw, sh)) return
         val layout = CuttingCalculator.packParts(boardParts, sw, sh, kerf)
         latestPlacements = layout.placements
         latestSheetW = sw
@@ -752,6 +786,10 @@ class MainActivity : Activity() {
             val stockKey = "MDF|${custom.thicknessMm}"
             partsByStock.getOrPut(stockKey) { mutableListOf() }.add(item)
         }
+        // Reject oversized parts before the packer can draw an invalid overflow placement.
+        val allStockParts = partsByStock.values.flatten()
+        if (rejectPartsThatDoNotFit(allStockParts, sw, sh)) return
+
         // Each material/thickness group is laid out separately.
         val placements = mutableListOf<SheetPlacement>()
         var sheetOffset = 0
