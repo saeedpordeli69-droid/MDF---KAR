@@ -81,6 +81,8 @@ class MainActivity : Activity() {
     private var latestSheetH = 2070.0
     private var latestSheetCount = 0
     private var selectedSheetIndex = 0
+    private val orderCabinets = mutableListOf<CabinetSpec>()
+    private lateinit var orderListView: LinearLayout
 
     
     
@@ -405,6 +407,43 @@ class MainActivity : Activity() {
         pairedRow(cabinetCard, fieldCell("ارتفاع پاخور", "Plinth height", plinthInput), fieldCell("ضخامت پشت‌بند", "Back panel", backThicknessInput))
         addTo(cabinetCard, label("تعداد کابینت با همین مشخصات", "Number of cabinets with these same dimensions", 12f))
         addTo(cabinetCard, cabinetQuantityInput, 8)
+        addTo(cabinetCard, label("سفارش چند کابینتی", "Multi-cabinet order", 14f), 4)
+        addTo(cabinetCard, TextView(this).apply {
+            text = tr("ابعاد کابینت فعلی را وارد کنید و «افزودن به سفارش» را بزنید. سپس مشخصات کابینت بعدی را وارد کنید.", "Enter the current cabinet dimensions and tap Add to order. Then enter the next cabinet's dimensions.")
+            textSize = 11f; setTextColor(muted); setPadding(0, 0, 0, dp(7))
+        }, 4)
+        orderListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        addTo(cabinetCard, orderListView, 6)
+        addTo(cabinetCard, button("＋ افزودن کابینت فعلی به سفارش", "+ Add current cabinet to order") {
+            val cw = number(widthInput.text.toString())
+            val ch = number(heightInput.text.toString())
+            val cd = number(depthInput.text.toString())
+            val ct = number(thicknessInput.text.toString())
+            val cs = number(shelfInput.text.toString())?.toInt()
+            val cdoors = number(doorInput.text.toString())?.toInt()
+            val cp = number(plinthInput.text.toString())
+            val cb = number(backThicknessInput.text.toString())
+            val cq = number(cabinetQuantityInput.text.toString())?.toInt()
+            if (cw == null || ch == null || cd == null || ct == null || cs == null || cdoors == null || cp == null || cb == null || cq == null || cw <= 0 || ch <= 0 || cd <= 0 || ct <= 0 || cs !in 0..30 || cdoors !in 0..2 || cp < 0 || cb < 0 || cq !in 1..100) {
+                Toast.makeText(this, tr("ابتدا ابعاد و تعداد را درست وارد کنید.", "Enter valid dimensions and quantity first."), Toast.LENGTH_LONG).show()
+            } else {
+                val idx = orderCabinets.size + 1
+                val spec = CabinetSpec(
+                    id = "cabinet_$idx", name = if (english) "Cabinet $idx" else "کابینت ${faDigits(idx.toString())}",
+                    cabinetType = if (cabinetSpinner.selectedItemPosition == 0) CabinetType.BASE else CabinetType.WALL,
+                    widthMm = cw, heightMm = ch, depthMm = cd, boardThicknessMm = ct,
+                    shelfCount = cs, doorCount = cdoors, quantity = cq, plinthMm = cp,
+                    includeBack = includeBackCheck.isChecked, backThicknessMm = cb, stockType = "MDF", grainSensitive = true
+                )
+                orderCabinets += spec
+                refreshOrderList()
+                Toast.makeText(this, tr("${spec.name} به سفارش اضافه شد.", "${spec.name} added to order."), Toast.LENGTH_SHORT).show()
+            }
+        }, 8)
+        addTo(cabinetCard, button("پاک کردن سفارش چند کابینتی", "Clear multi-cabinet order") {
+            orderCabinets.clear(); refreshOrderList()
+            Toast.makeText(this, tr("سفارش پاک شد؛ محاسبه دوباره از مشخصات فعلی انجام می‌شود.", "Order cleared; calculation will use current dimensions."), Toast.LENGTH_SHORT).show()
+        }, 8)
 
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
@@ -837,6 +876,10 @@ class MainActivity : Activity() {
     }
 
     private fun calculate() {
+        if (orderCabinets.isNotEmpty()) {
+            calculateMultiCabinetOrder()
+            return
+        }
         val w = number(widthInput.text.toString())
         val h = number(heightInput.text.toString())
         val d = number(depthInput.text.toString())
@@ -987,6 +1030,108 @@ class MainActivity : Activity() {
         val output = if (english) summaryEn else faDigits(summaryFa)
         resultText.text = output
         saveSettings()
+    }
+
+    private fun refreshOrderList() {
+        if (!::orderListView.isInitialized) return
+        orderListView.removeAllViews()
+        if (orderCabinets.isEmpty()) {
+            orderListView.addView(TextView(this).apply {
+                text = tr("هنوز کابینتی به سفارش اضافه نشده است.", "No cabinets have been added yet.")
+                textSize = 11f; setTextColor(muted); setPadding(dp(8), dp(5), dp(8), dp(5))
+            })
+            return
+        }
+        orderCabinets.forEachIndexed { index, c ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(9), dp(7), dp(9), dp(7))
+                background = rounded(Color.rgb(10, 39, 65), 10, Color.rgb(35, 100, 150), 1)
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) }
+            }
+            val info = TextView(this).apply {
+                text = "${c.name}  •  ${fmt(c.widthMm)}×${fmt(c.heightMm)}×${fmt(c.depthMm)} mm  •  ${tr("ضخامت", "thickness")} ${fmt(c.boardThicknessMm)}  •  ${tr("تعداد", "qty")} ${c.quantity}"
+                textSize = 11f; setTextColor(ink)
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            }
+            row.addView(info)
+            row.addView(button("×", "×") {
+                orderCabinets.removeAt(index); refreshOrderList()
+            }.apply { minWidth = dp(40); minHeight = dp(38) })
+            orderListView.addView(row)
+        }
+    }
+
+    private fun calculateMultiCabinetOrder() {
+        val sw = number(sheetWidthInput.text.toString())
+        val sh = number(sheetHeightInput.text.toString())
+        val kerf = number(kerfInput.text.toString())
+        if (sw == null || sh == null || kerf == null || sw <= 0 || sh <= 0 || kerf < 0 || orderCabinets.any { !it.isValid() }) {
+            resultText.text = tr("ابعاد ورق یا اطلاعات سفارش معتبر نیست.", "Sheet dimensions or order details are invalid.")
+            return
+        }
+        val allParts = mutableListOf<CuttingPart>()
+        var backArea = 0.0
+        var pvcMeters = 0.0
+        orderCabinets.forEach { c ->
+            val isBase = c.cabinetType == CabinetType.BASE
+            val plinth = if (isBase && legsCheck.isChecked) c.plinthMm else 0.0
+            val bodyH = c.heightMm - plinth
+            val innerW = c.widthMm - 2 * c.boardThicknessMm
+            if (bodyH <= 0 || innerW <= 0) {
+                resultText.text = tr("ابعاد ${c.name} پس از کسر ضخامت/پاخور معتبر نیست.", "Dimensions for ${c.name} are invalid after subtracting thickness/plinth.")
+                return
+            }
+            fun part(labelFa: String, labelEn: String, w: Double, h: Double, qty: Int, rotate: Boolean = false) {
+                if (qty > 0 && w > 0 && h > 0) allParts += CuttingPart("${c.name} - ${tr(labelFa, labelEn)}", w, h, qty * c.quantity, rotate)
+            }
+            part("پهلو", "Side", c.depthMm, bodyH, 2)
+            part("کف", "Bottom", innerW, c.depthMm, 1)
+            part("طبقه", "Shelf", innerW, c.depthMm, c.shelfCount)
+            if (isBase) part("ریل بالا", "Top rail", max(100.0, innerW / 8), c.boardThicknessMm, 2, true)
+            else part("بالا", "Top", innerW, c.depthMm, 1)
+            if (c.doorCount > 0) part("درب", "Door", (c.widthMm - 3.0) / c.doorCount, bodyH - 3.0, c.doorCount)
+            if (c.includeBack && includeBackCheck.isChecked) backArea += c.widthMm * bodyH * c.quantity / 1_000_000.0
+            if (doorPvcCheck.isChecked && c.doorCount > 0) {
+                val dw = (c.widthMm - 3.0) / c.doorCount
+                pvcMeters += c.quantity * c.doorCount * 2 * (dw + bodyH) / 1000.0
+            }
+            if (sidePvcCheck.isChecked) pvcMeters += c.quantity * 2 * bodyH / 1000.0
+            if (shelfPvcCheck.isChecked) pvcMeters += c.quantity * (1 + c.shelfCount) * innerW / 1000.0
+        }
+        // Different thicknesses/stock types are packed separately; sheet indexes are then combined for navigation.
+        val grouped = orderCabinets.groupBy { "${it.stockType}|${it.boardThicknessMm}" }
+        val placements = mutableListOf<SheetPlacement>()
+        var sheetOffset = 0
+        grouped.values.forEach { group ->
+            val ids = group.map { it.name + " - " }
+            val parts = allParts.filter { p -> ids.any { p.name.startsWith(it) } }
+            if (parts.isNotEmpty()) {
+                val packed = CuttingCalculator.packParts(parts, sw, sh, kerf)
+                placements += packed.placements.map { it.copy(sheet = it.sheet + sheetOffset) }
+                sheetOffset += packed.sheetCount
+            }
+        }
+        latestPlacements = placements
+        latestSheetW = sw; latestSheetH = sh; latestSheetCount = sheetOffset; selectedSheetIndex = 0
+        updateSheetNavigation(); layoutView.invalidate()
+        val boardArea = allParts.sumOf { it.width * it.height * it.quantity }
+        val totalSheetArea = latestSheetCount * sw * sh
+        val waste = if (totalSheetArea > 0) max(0.0, (totalSheetArea - boardArea) / totalSheetArea * 100.0) else 0.0
+        metricSheets.text = if (english) latestSheetCount.toString() else faDigits(latestSheetCount.toString())
+        metricWaste.text = if (english) "${fmt(waste)}%" else faDigits("${fmt(waste)}٪")
+        metricPieces.text = if (english) placements.size.toString() else faDigits(placements.size.toString())
+        partsList.removeAllViews()
+        allParts.forEachIndexed { index, part ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(7), dp(8), dp(7), dp(8)); if (index % 2 == 0) setBackgroundColor(Color.rgb(8, 30, 51)) }
+            row.addView(View(this).apply { background = rounded(partColor(part.name), 5); layoutParams = LinearLayout.LayoutParams(dp(12), dp(28)).apply { marginEnd = dp(8) } })
+            row.addView(TextView(this).apply { text = part.name; textSize = 11f; setTextColor(ink); layoutParams = LinearLayout.LayoutParams(0, -2, 1.4f) })
+            row.addView(TextView(this).apply { text = "${faDigits(fmt(part.width))} × ${faDigits(fmt(part.height))}"; textSize = 10f; setTextColor(AppTheme.TEXT_SECONDARY); gravity = Gravity.CENTER; layoutParams = LinearLayout.LayoutParams(0, -2, 1.1f) })
+            row.addView(TextView(this).apply { text = faDigits(part.quantity.toString()); textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; layoutParams = LinearLayout.LayoutParams(dp(30), -2) })
+            partsList.addView(row)
+        }
+        val cabinetSummary = orderCabinets.joinToString("\n") { c -> "${c.name}: ${fmt(c.widthMm)}×${fmt(c.heightMm)}×${fmt(c.depthMm)} mm, ${tr("تعداد", "qty")} ${c.quantity}, ${tr("ضخامت", "thickness")} ${fmt(c.boardThicknessMm)} mm" }
+        resultText.text = if (english) "Multi-cabinet order\n$cabinetSummary\nSheets: $latestSheetCount\nEstimated area-based waste: ${fmt(waste)}%\nSeparate back panels: ${fmt(backArea)} m²\nEstimated PVC: ${fmt(pvcMeters)} m\n\nWarning: planning-level row packing; verify all dimensions and grain direction before cutting." else "سفارش چند کابینتی\n$cabinetSummary\nتعداد ورق: ${faDigits(latestSheetCount.toString())}\nدورریز تخمینی بر اساس مساحت: ${faDigits(fmt(waste))}٪\nپشت‌بند جداگانه: ${faDigits(fmt(backArea))} مترمربع\nPVC تخمینی: ${faDigits(fmt(pvcMeters))} متر\n\nهشدار: چیدمان تخمینی است؛ پیش از برش، ابعاد و جهت رگه را بررسی کنید."
     }
 
     private fun updateSheetNavigation() {
