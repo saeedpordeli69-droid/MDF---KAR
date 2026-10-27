@@ -114,7 +114,7 @@ object CuttingCalculator {
 
             if (orientations.isEmpty()) {
                 val index = freeBySheet.size
-                freeBySheet += mutableListOf()
+                freeBySheet.add(mutableListOf())
                 placements += SheetPlacement(part.name, 0.0, 0.0, part.width, part.height, false, index)
                 continue
             }
