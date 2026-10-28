@@ -513,8 +513,28 @@ class MainActivity : Activity() {
             }
             orderCabinets.clear()
             customParts.clear()
-            customParts += CustomOrderPart(name, length, width, qty, thickness)
-            calculateMultiCabinetOrder()
+            val sw = number(sheetWidthInput.text.toString())
+            val sh = number(sheetHeightInput.text.toString())
+            val kerf = number(kerfInput.text.toString())
+            if (sw == null || sh == null || kerf == null || sw <= 0 || sh <= 0 || kerf < 0) {
+                resultText.text = tr("ابعاد ورق و تیغه را معتبر وارد کنید.", "Enter valid sheet and saw-kerf dimensions.")
+                return
+            }
+            val part = CuttingPart(name, width, length, qty, true)
+            if (rejectPartsThatDoNotFit(listOf(part), sw, sh)) return
+            val packed = CuttingCalculator.packParts(listOf(part), sw, sh, kerf)
+            latestPlacements = packed.placements
+            latestSheetW = sw; latestSheetH = sh; latestSheetCount = packed.sheetCount; selectedSheetIndex = 0
+            updateSheetNavigation(); layoutView.invalidate()
+            val area = width * length * qty
+            val totalArea = latestSheetCount * sw * sh
+            val waste = if (totalArea > 0) max(0.0, (totalArea - area) / totalArea * 100.0) else 0.0
+            metricSheets.text = if (english) latestSheetCount.toString() else faDigits(latestSheetCount.toString())
+            metricWaste.text = if (english) "${fmt(waste)}%" else faDigits("${fmt(waste)}٪")
+            metricPieces.text = if (english) qty.toString() else faDigits(qty.toString())
+            resultText.text = if (english) "$name: ${fmt(length)} × ${fmt(width)} mm, quantity $qty, board thickness ${fmt(thickness)} mm. Dimensions used without automatic adjustment." else "$name: ${faDigits(fmt(length))} × ${faDigits(fmt(width))} میلی‌متر؛ تعداد ${faDigits(qty.toString())}؛ ضخامت ${faDigits(fmt(thickness))} میلی‌متر. ابعاد بدون تغییر خودکار استفاده شدند."
+            partsList.removeAllViews()
+            partsList.addView(TextView(this).apply { text = resultText.text; setTextColor(ink); textSize = 14f; setPadding(dp(8), dp(8), dp(8), dp(8)) })
             return
         }
         if (orderCabinets.isNotEmpty() || customParts.isNotEmpty()) {
