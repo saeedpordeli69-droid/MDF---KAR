@@ -133,8 +133,9 @@ data class MaterialCuttingPlan(
         get() = (totalSheetAreaSquareMeters - totalPartAreaSquareMeters).coerceAtLeast(0.0)
 }
 
+/** Prices are entered in toman. Board cost is charged per complete sheet, not by area. */
 data class PricingRates(
-    val boardPricePerSquareMeter: Double = 0.0,
+    val boardPricePerSheet: Double = 0.0,
     val edgePricePerMeter: Double = 0.0,
     val hardwareCost: Double = 0.0,
     val laborCost: Double = 0.0,
@@ -142,16 +143,26 @@ data class PricingRates(
     val otherCost: Double = 0.0,
     val profitPercent: Double = 0.0
 ) {
-    fun estimate(order: MixedProductOrder): PriceEstimate {
-        val material = order.sheetAreaSquareMeters() * boardPricePerSquareMeter
-        val edging = order.totalEdgeMeters() * edgePricePerMeter
-        val subtotal = material + edging + hardwareCost + laborCost + transportCost + otherCost
-        val profit = subtotal * profitPercent.coerceAtLeast(0.0) / 100.0
-        return PriceEstimate(material, edging, hardwareCost, laborCost, transportCost, otherCost, profit, subtotal + profit)
+    fun estimate(sheetCount: Int, edgeMeters: Double): OrderPriceEstimate {
+        val safeSheetCount: Int = sheetCount.coerceAtLeast(0)
+        val safeBoardPrice: Double = boardPricePerSheet.coerceAtLeast(0.0)
+        val safeEdgeMeters: Double = edgeMeters.coerceAtLeast(0.0)
+        val safeEdgePrice: Double = edgePricePerMeter.coerceAtLeast(0.0)
+        val material: Double = safeSheetCount.toDouble() * safeBoardPrice
+        val edging: Double = safeEdgeMeters * safeEdgePrice
+        val hardware: Double = hardwareCost.coerceAtLeast(0.0)
+        val labor: Double = laborCost.coerceAtLeast(0.0)
+        val transport: Double = transportCost.coerceAtLeast(0.0)
+        val other: Double = otherCost.coerceAtLeast(0.0)
+        val subtotal: Double = listOf(material, edging, hardware, labor, transport, other).sum()
+        val safeProfitPercent: Double = profitPercent.coerceAtLeast(0.0)
+        val profit: Double = subtotal * safeProfitPercent / 100.0
+        val total: Double = subtotal + profit
+        return OrderPriceEstimate(material, edging, hardware, labor, transport, other, profit, total)
     }
 }
 
-data class PriceEstimate(
+data class OrderPriceEstimate(
     val board: Double,
     val edging: Double,
     val hardware: Double,
@@ -160,4 +171,6 @@ data class PriceEstimate(
     val other: Double,
     val profit: Double,
     val total: Double
-)
+) {
+    val subtotal: Double get() = board + edging + hardware + labor + transport + other
+}
