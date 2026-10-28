@@ -465,6 +465,95 @@ internal fun MainActivity.buildScreen() {
         }
         addTo(productDetailsCard, productRecipeHint, 2)
 
+        // Modular structure controls: each module changes both the live preview and generated cutting list.
+        val structureOptionsCard = addSection(
+            productDetailsCard, "چیدمان اجزای محصول", "Product component layout",
+            "برای پیشخوان و کتابخانه، اجزای واقعی را انتخاب کنید.",
+            "Choose actual modules for counters and bookcases."
+        )
+        fun styledSpinner(faItems: Array<String>, enItems: Array<String>): Spinner = Spinner(this).apply {
+            adapter = object : ArrayAdapter<String>(this@buildScreen, android.R.layout.simple_spinner_item, if (english) enItems else faItems) {
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                    (super.getView(position, convertView, parent) as TextView).apply {
+                        setTextColor(AppTheme.TEXT); textSize = 14f; setPadding(dp(10), dp(7), dp(10), dp(7))
+                    }
+                override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View =
+                    (super.getDropDownView(position, convertView, parent) as TextView).apply {
+                        setTextColor(AppTheme.TEXT); textSize = 14f; setBackgroundColor(Color.rgb(7, 24, 43)); setPadding(dp(12), dp(10), dp(12), dp(10))
+                    }
+            }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            background = rounded(Color.rgb(12, 37, 63), 12, Color.rgb(39, 105, 159), 1)
+        }
+        val counterOptions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        addTo(structureOptionsCard, counterOptions, 4)
+        addTo(counterOptions, label("بخش سمت چپ پیشخوان", "Counter left module", 12f), 2)
+        productLeftModuleSpinner = styledSpinner(
+            arrayOf("کشوها", "کمد درب‌دار", "قفسه باز", "فضای خالی"),
+            arrayOf("Drawers", "Cabinet", "Open shelves", "Open space")
+        )
+        addTo(counterOptions, productLeftModuleSpinner, 5)
+        addTo(counterOptions, label("بخش سمت راست پیشخوان", "Counter right module", 12f), 2)
+        productRightModuleSpinner = styledSpinner(
+            arrayOf("کشوها", "کمد درب‌دار", "قفسه باز", "فضای خالی"),
+            arrayOf("Drawers", "Cabinet", "Open shelves", "Open space")
+        )
+        productRightModuleSpinner.setSelection(1)
+        addTo(counterOptions, productRightModuleSpinner, 5)
+        addTo(counterOptions, label("تعداد کشو در هر بخش کشودار", "Drawers per drawer module", 12f), 2)
+        productDrawerCountInput = field("تعداد کشو", "Drawer count", "productDrawerCount", "۲")
+        addTo(counterOptions, productDrawerCountInput, 4)
+
+        val bookcaseOptions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        addTo(structureOptionsCard, bookcaseOptions, 4)
+        addTo(bookcaseOptions, label("ساختار قسمت پایین کتابخانه", "Bookcase lower section", 12f), 2)
+        bookcaseBaseTypeSpinner = styledSpinner(
+            arrayOf("کمد درب‌دار", "کشو", "قفسه باز"),
+            arrayOf("Closed cabinet", "Drawers", "Open shelves")
+        )
+        addTo(bookcaseOptions, bookcaseBaseTypeSpinner, 5)
+        addTo(bookcaseOptions, label("ارتفاع قسمت پایین (mm)", "Lower section height (mm)", 12f), 2)
+        bookcaseBaseHeightInput = field("ارتفاع قسمت پایین", "Lower section height", "bookcaseBaseHeight", "۶۰۰")
+        addTo(bookcaseOptions, bookcaseBaseHeightInput, 4)
+
+        productPreviewView = ProductPreviewView(this).apply {
+            contentDescription = tr("پیش‌نمایش شماتیک و زنده محصول", "Live schematic product preview")
+            minimumHeight = dp(220)
+        }
+        addTo(productDetailsCard, TextView(this).apply {
+            text = tr("پیش‌نمایش طراحی", "Design preview")
+            textSize = 15f; setTextColor(AppTheme.ACCENT); setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(dp(2), dp(6), dp(2), dp(4))
+        }, 3)
+        productDetailsCard.addView(productPreviewView, LinearLayout.LayoutParams(-1, dp(245)).apply { bottomMargin = dp(10) })
+
+        fun updateProductPreview() {
+            val w = number(productWidthInput.text.toString()) ?: 1200.0
+            val h = number(productHeightInput.text.toString()) ?: 900.0
+            val d = number(productDepthInput.text.toString()) ?: 500.0
+            val t = number(productThicknessInput.text.toString()) ?: 16.0
+            val shelfCount = number(productShelfInput.text.toString())?.toInt() ?: 3
+            val doorCount = number(productDoorInput.text.toString())?.toInt() ?: 2
+            val drawers = (number(productDrawerCountInput.text.toString())?.toInt() ?: 2).coerceIn(1, 8)
+            val baseH = number(bookcaseBaseHeightInput.text.toString()) ?: 600.0
+            productPreviewView.configure(
+                selectedProductTypeIndex, w, h, d, shelfCount, doorCount,
+                productLeftModuleSpinner.selectedItemPosition, productRightModuleSpinner.selectedItemPosition,
+                drawers, bookcaseBaseTypeSpinner.selectedItemPosition, baseH, english
+            )
+        }
+        val previewWatcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { updateProductPreview() }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        }
+        listOf(productWidthInput, productHeightInput, productDepthInput, productThicknessInput, productShelfInput, productDoorInput, productDrawerCountInput, bookcaseBaseHeightInput).forEach { it.addTextChangedListener(previewWatcher) }
+        listOf(productLeftModuleSpinner, productRightModuleSpinner, bookcaseBaseTypeSpinner).forEach { spinner ->
+            spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) { updateProductPreview() }
+            }
+        }
+
         var lastProductDefaults = listOf(1200.0, 1800.0, 500.0)
         fun applyProductSelection(position: Int) {
             selectedProductTypeIndex = position
@@ -504,10 +593,13 @@ internal fun MainActivity.buildScreen() {
                 lastProductDefaults = defaults
                 productShelvesField.visibility = if (position in listOf(1, 2, 4, 5, 6, 7, 8)) View.VISIBLE else View.GONE
                 productDoorsField.visibility = if (position in listOf(1, 7, 8)) View.VISIBLE else View.GONE
-                productIncludeBackCheck.visibility = if (position in listOf(1, 2, 4, 7, 8)) View.VISIBLE else View.GONE
+                productIncludeBackCheck.visibility = if (position in listOf(1, 2, 4, 5, 7, 8)) View.VISIBLE else View.GONE
                 // Non-cabinet products have their own overall-dimensions form and auto-generated parts.
                 cabinetCard.visibility = View.GONE
                 productDetailsCard.visibility = View.VISIBLE
+                structureOptionsCard.visibility = if (position in listOf(2, 4, 5)) View.VISIBLE else View.GONE
+                counterOptions.visibility = if (position in listOf(4, 5)) View.VISIBLE else View.GONE
+                bookcaseOptions.visibility = if (position == 2) View.VISIBLE else View.GONE
                 cabinetSpinner.setSelection(0)
                 runCatching { applyCuttingMode(0) }
                 val selectedName = productTypeSpinner.selectedItem?.toString().orEmpty()
@@ -541,6 +633,7 @@ internal fun MainActivity.buildScreen() {
                     "ابعاد کلی $productName را وارد کنید. برنامه قطعات پیشنهادی را می‌سازد و در صفحه بعد نقشه برش را نمایش می‌دهد.",
                     "Enter the overall dimensions for $productName. The app generates suggested components and shows the cutting layout on the next page."
                 )
+                updateProductPreview()
             }
         }
         productTypeSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
@@ -552,6 +645,7 @@ internal fun MainActivity.buildScreen() {
         // Ensure the initial Cabinet selection matches the visible form instead of leaving
         // the independent-cutting form selected under a Cabinet heading.
         applyProductSelection(productTypeSpinner.selectedItemPosition)
+        updateProductPreview()
 
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
