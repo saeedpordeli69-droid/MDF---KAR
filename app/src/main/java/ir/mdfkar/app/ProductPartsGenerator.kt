@@ -95,7 +95,16 @@ internal fun MainActivity.generateAutomaticProductParts(showErrors: Boolean = tr
                     if (showErrors) resultText.text = tr("ارتفاع بخش بالایی کتابخانه برای طبقه و تقسیم‌کننده کافی نیست.", "The upper bookcase section is too short for shelves and divider.")
                     return null
                 }
-                if (shelfCount > 0) addShelves(shelfCount, "طبقه بخش بالایی", "Upper bookcase shelf")
+                // The upper divider splits each shelf into two physical panels.
+                // This makes the cut list agree with the visible divided bookcase.
+                if (shelfCount > 0) {
+                    val upperShelfWidth = (width - 3 * thickness) / 2.0
+                    if (upperShelfWidth <= 0) {
+                        if (showErrors) resultText.text = tr("عرض کتابخانه برای تقسیم طبقه‌های بالا کافی نیست.", "Bookcase width is too small for split upper shelves.")
+                        return null
+                    }
+                    addShelves(shelfCount * 2, "طبقه بخش بالایی", "Upper bookcase shelf", upperShelfWidth)
+                }
                 addPart("طبقه روی ماژول پایین", "Lower module top shelf", width - 2 * thickness, depth, 1)
                 addPart("تقسیم‌کننده عمودی بخش بالا", "Upper vertical divider", upperHeight, depth, 1)
                 when (bookcaseBase) {
