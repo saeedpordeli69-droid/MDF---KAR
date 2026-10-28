@@ -1,6 +1,7 @@
 package ir.mdfkar.app
 
 import java.util.UUID
+import java.util.Locale
 
 /** Shared product catalogue for mixed MDF jobs. Dimensions are millimetres. */
 enum class ProductKind(val titleFa: String, val titleEn: String) {
@@ -34,10 +35,20 @@ data class ProductPart(
 ) {
     fun isValid(): Boolean = name.isNotBlank() && lengthMm > 0 && widthMm > 0 &&
         quantity in 1..10000 && thicknessMm > 0 && stockType.isNotBlank()
+
     fun edgeMeters(): Double = quantity * (
         (if (edgeTop) lengthMm else 0.0) + (if (edgeBottom) lengthMm else 0.0) +
         (if (edgeLeft) widthMm else 0.0) + (if (edgeRight) widthMm else 0.0)
     ) / 1000.0
+
+    /** Convert a shared-order part into the app's existing cutting engine format. */
+    fun toCuttingPart(): CuttingPart = CuttingPart(
+        name = name,
+        width = widthMm,
+        height = lengthMm,
+        quantity = quantity,
+        rotate = !grainSensitive
+    )
 }
 
 data class ProductOrderLine(
@@ -50,16 +61,92 @@ data class ProductOrderLine(
 ) {
     fun isValid(): Boolean = name.isNotBlank() && quantity in 1..1000 && parts.isNotEmpty() &&
         parts.all { it.isValid() }
+
     fun expandedParts(): List<ProductPart> = parts.map { it.copy(quantity = it.quantity * quantity) }
 }
 
-/** A single mixed order can contain cabinets, furniture, counters and loose cut parts. */
+/** One mixed order can contain any number of products and loose cut parts. */
 data class MixedProductOrder(val name: String, val lines: List<ProductOrderLine>) {
     fun isValid(): Boolean = name.isNotBlank() && lines.isNotEmpty() && lines.all { it.isValid() }
+
     fun allParts(): List<ProductPart> = lines.flatMap { it.expandedParts() }
+
     fun totalEdgeMeters(): Double = allParts().sumOf { it.edgeMeters() }
-    fun sheetAreaSquareMeters(): Double = allParts().sumOf { it.lengthMm * it.widthMm * it.quantity } / 1_000_000.0
+
+    fun sheetAreaSquareMeters(): Double = allParts().sumOf {
+        it.lengthMm * it.widthMm * it.quantity
+    } / 1_000_000.0
+
+    /** Group parts by material and thickness; different stock types never share a sheet. */
+    fun partsByStockAndThickness(): Map<String, List<ProductPart>> = allParts()
+        .groupBy { stockKey(it.stockType, it.thicknessMm) }
+
+    /**
+     * Calculate all stock groups using the existing cutting planner.
+     * Sheet indices are made continuous across groups for the current layout view.
+     * Parts that cannot fit are returned explicitly and are not silently omitted.
+     */
+    fun calculateCuttingPlan(
+        sheetWidthMm: Double,
+        sheetHeightMm: Double,
+        kerfMm: Double
+    ): MixedOrderCuttingPlan {
+        if (!isValid() || sheetWidthMm <= 0.0 || sheetHeightMm <= 0.0 || kerfMm < 0.0) {
+            return MixedOrderCuttingPlan(emptyList(), emptyList(), 0, 0.0, totalEdgeMeters(), false)
+        }
+
+        val allPlacements = mutableListOf<SheetPlacement>()
+        val oversized = mutableListOf<ProductPart>()
+        var sheetOffset = 0
+        val groups = partsByStockAndThickness().toSortedMap()
+
+        groups.values.forEach { group ->
+            val fits = group.filter { part ->
+                val canFitNormal = part.widthMm <= sheetWidthMm && part.lengthMm <= sheetHeightMm
+                val canFitRotated = !part.grainSensitive &&
+                    part.lengthMm <= sheetWidthMm && part.widthMm <= sheetHeightMm
+                if (!canFitNormal && !canFitRotated) oversized += part
+                canFitNormal || canFitRotated
+            }
+            if (fits.isNotEmpty()) {
+                val packed = CuttingCalculator.packParts(
+                    fits.map { it.toCuttingPart() }, sheetWidthMm, sheetHeightMm, kerfMm
+                )
+                allPlacements += packed.placements.map { it.copy(sheet = it.sheet + sheetOffset) }
+                sheetOffset += packed.sheetCount
+            }
+        }
+
+        val area = allParts().sumOf { it.lengthMm * it.widthMm * it.quantity }
+        val totalSheetArea = sheetOffset * sheetWidthMm * sheetHeightMm
+        val wastePercent = if (totalSheetArea > 0.0) {
+            ((totalSheetArea - area) / totalSheetArea * 100.0).coerceIn(0.0, 100.0)
+        } else 0.0
+
+        return MixedOrderCuttingPlan(
+            placements = allPlacements,
+            oversizedParts = oversized.distinctBy { it.id },
+            sheetCount = sheetOffset,
+            wastePercent = wastePercent,
+            edgeMeters = totalEdgeMeters(),
+            valid = oversized.isEmpty() && allPlacements.isNotEmpty()
+        )
+    }
+
+    companion object {
+        fun stockKey(stockType: String, thicknessMm: Double): String =
+            "${stockType.trim().uppercase(Locale.ROOT)}|${"%.3f".format(Locale.US, thicknessMm)}"
+    }
 }
+
+data class MixedOrderCuttingPlan(
+    val placements: List<SheetPlacement>,
+    val oversizedParts: List<ProductPart>,
+    val sheetCount: Int,
+    val wastePercent: Double,
+    val edgeMeters: Double,
+    val valid: Boolean
+)
 
 data class PricingRates(
     val boardPricePerSquareMeter: Double = 0.0,
