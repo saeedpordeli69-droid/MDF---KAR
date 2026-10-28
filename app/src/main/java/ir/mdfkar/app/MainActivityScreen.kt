@@ -282,12 +282,12 @@ internal fun MainActivity.buildScreen() {
 
         // Independent cut form: direct dimensions, with no automatic cabinet adjustments.
         val independentCutCard = addSection(homePage, "مشخصات برش مستقل", "Independent cut details", "ابعاد قطعه دقیقاً همان مقادیری است که وارد می‌کنید", "Part dimensions are used exactly as entered")
-        customPartNameInput = field("نام قطعه", "Part name", "customPartName", "قطعه").apply { inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES }
+        customPartNameInput = field("نام قطعه (اختیاری)", "Part name (optional)", "customPartName", "").apply { inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES; hint = tr("خالی بگذارید تا خودکار نام‌گذاری شود", "Leave blank for automatic naming") }
         customPartLengthInput = field("طول قطعه (میلی‌متر)", "Part length (mm)", "customPartLength", "۸۰۰")
         customPartWidthInput = field("عرض قطعه (میلی‌متر)", "Part width (mm)", "customPartWidth", "۵۰۰")
         customPartQtyInput = field("تعداد", "Quantity", "customPartQty", "۱")
         customPartThicknessInput = field("ضخامت ورق (میلی‌متر)", "Board thickness (mm)", "customPartThickness", "۱۶")
-        addTo(independentCutCard, fieldCell("نام قطعه", "Part name", customPartNameInput), 5)
+        addTo(independentCutCard, customPartNameInput.apply { setPadding(dp(10), dp(8), dp(10), dp(8)); background = rounded(Color.rgb(10, 31, 53), 13, Color.rgb(43, 102, 153), 1) }, 5)
         pairedRow(independentCutCard, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
         pairedRow(independentCutCard, fieldCell("تعداد", "Quantity", customPartQtyInput), fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput))
         customPartsListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -297,13 +297,15 @@ internal fun MainActivity.buildScreen() {
             val width = number(customPartWidthInput.text.toString())
             val qty = number(customPartQtyInput.text.toString())?.toInt()
             val thickness = number(customPartThicknessInput.text.toString())
-            if (name.isBlank() || length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0) {
-                Toast.makeText(this, tr("نام، طول، عرض، ضخامت و تعداد معتبر وارد کنید.", "Enter a name and valid dimensions, thickness and quantity."), Toast.LENGTH_LONG).show()
+            if (length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0) {
+                Toast.makeText(this, tr("طول، عرض، ضخامت و تعداد را معتبر وارد کنید.", "Enter valid length, width, thickness and quantity."), Toast.LENGTH_LONG).show()
             } else {
-                customParts += CustomOrderPart(name, length, width, qty, thickness)
-                refreshCustomPartsList()
+                val nextNumber = independentParts.size + 1
+                val partName = name.ifBlank { if (english) "Independent $nextNumber" else "مستقل ${faDigits(nextNumber.toString())}" }
+                independentParts += CustomOrderPart(partName, length, width, qty, thickness)
+                refreshIndependentPartsList()
                 customPartNameInput.setText("")
-                Toast.makeText(this, tr("قطعه به فهرست اضافه شد.", "Part added to list."), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, tr("قطعه به فهرست مستقل اضافه شد.", "Part added to independent list."), Toast.LENGTH_SHORT).show()
             }
         }, 5)
         addTo(independentCutCard, customPartsListView, 8)
