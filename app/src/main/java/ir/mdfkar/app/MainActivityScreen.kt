@@ -285,11 +285,12 @@ internal fun MainActivity.buildScreen() {
                     customPartsToggleButton.visibility = View.GONE
                     customPartModeSpinner.setSelection(0)
                     updateCustomPartsToggleLabel()
-                    if (::customPartsSection.isInitialized) {
-                        // Hide the old linked/custom-part workflow: independent cutting is direct.
-                        for (index in 4..8) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
-                        for (index in 9..11) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
-                    }
+                    // This is an extension function, so Kotlin does not allow checking
+                    // a member property's backing field with ::property.isInitialized here.
+                    // The surrounding runCatching safely ignores the initial callback that
+                    // may occur before customPartsSection has been created.
+                    for (index in 4..8) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
+                    for (index in 9..11) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
                 }
             }
         }
