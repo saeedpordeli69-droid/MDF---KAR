@@ -199,7 +199,7 @@ internal fun MainActivity.buildScreen() {
         addTo(sheetCard, label("ضخامت تیغه برش (میلی‌متر)", "Saw kerf (mm)", 12f))
         addTo(sheetCard, kerfInput, 1)
 
-        val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
+        val modeCard = addSection(homePage, "نوع عملیات", "Operation mode", "حالت موردنظر را انتخاب کنید", "Choose the operation mode")
         cabinetSpinner = Spinner(this).apply {
             val cabinetTypes = if (english) arrayOf("Independent cut", "Base cabinet", "Wall cabinet") else arrayOf("برش مستقل", "کابینت زمینی", "کابینت دیواری")
             adapter = object : ArrayAdapter<String>(this@buildScreen, android.R.layout.simple_spinner_item, cabinetTypes) {
@@ -225,7 +225,8 @@ internal fun MainActivity.buildScreen() {
             dropDownVerticalOffset = dp(4)
             dropDownWidth = ViewGroup.LayoutParams.MATCH_PARENT
         }
-        addTo(cabinetCard, cabinetSpinner, 8)
+        addTo(modeCard, cabinetSpinner, 8)
+        val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "ابعاد بدنه کابینت", "Cabinet carcass dimensions")
         widthInput = field("عرض کابینت", "Cabinet width", "width", "۸۰۰")
         heightInput = field("ارتفاع کابینت", "Cabinet height", "height", "۷۲۰")
         depthInput = field("عمق کابینت", "Cabinet depth", "depth", "۵۶۰")
