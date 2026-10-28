@@ -769,26 +769,20 @@ class MainActivity : Activity() {
             return
         }
 
-        val parts = mutableListOf<CuttingPart>()
-        parts += CuttingPart(tr("پهلو", "Side"), d, bodyH, 2)
-        parts += CuttingPart(tr("کف", "Bottom"), innerW, d)
-        if (shelves > 0) parts += CuttingPart(tr("طبقه", "Shelf"), innerW, d, shelves)
-        if (isBase) {
-            parts += CuttingPart(tr("ریل بالا", "Top rail"), max(100.0, innerW / 8), t, 2)
-        } else {
-            parts += CuttingPart(tr("بالا", "Top"), innerW, d)
-        }
-
-        if (includeBackCheck.isChecked) {
-            parts += CuttingPart(tr("پشت‌بند", "Back panel"), w, bodyH, 1, false)
-        }
-        if (doors > 0) {
-            val doorW = (w - 3.0) / doors
-            val doorH = bodyH - 3.0
-            if (doorW > 0 && doorH > 0) parts += CuttingPart(tr("درب", "Door"), doorW, doorH, doors)
-        }
-
-        val multipliedParts = parts.map { it.copy(quantity = it.quantity * cabinetQuantity) }
+        // Keep the legacy cabinet form stable while sharing its cut-list recipe in a
+        // dedicated generator. Top rails now span the cabinet opening instead of being
+        // incorrectly generated as short, thickness-wide strips.
+        val multipliedParts = generateCabinetCutList(
+            width = w,
+            bodyHeight = bodyH,
+            depth = d,
+            innerWidth = innerW,
+            shelfCount = shelves,
+            doorCount = doors,
+            isBaseCabinet = isBase,
+            includeBack = includeBackCheck.isChecked,
+            cabinetQuantity = cabinetQuantity
+        )
         val boardParts = multipliedParts.filter { it.name != tr("پشت‌بند", "Back panel") }
         if (rejectPartsThatDoNotFit(boardParts, sw, sh)) return
         val layout = CuttingCalculator.packParts(boardParts, sw, sh, kerf)
