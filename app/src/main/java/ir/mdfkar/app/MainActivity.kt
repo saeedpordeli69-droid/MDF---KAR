@@ -512,7 +512,6 @@ class MainActivity : Activity() {
                 return
             }
             orderCabinets.clear()
-            customParts.clear()
             val sw = number(sheetWidthInput.text.toString())
             val sh = number(sheetHeightInput.text.toString())
             val kerf = number(kerfInput.text.toString())
@@ -520,19 +519,29 @@ class MainActivity : Activity() {
                 resultText.text = tr("ابعاد ورق و تیغه را معتبر وارد کنید.", "Enter valid sheet and saw-kerf dimensions.")
                 return
             }
-            val part = CuttingPart(name, width, length, qty, true)
-            if (rejectPartsThatDoNotFit(listOf(part), sw, sh)) return
-            val packed = CuttingCalculator.packParts(listOf(part), sw, sh, kerf)
+            val independentParts = if (customParts.isNotEmpty()) {
+                customParts.filter { it.linkedCabinetId == null }.map {
+                    CuttingPart(it.name, it.widthMm, it.lengthMm, it.quantity, true)
+                }
+            } else listOf(CuttingPart(name, width, length, qty, true))
+            if (independentParts.isEmpty()) {
+                resultText.text = tr("ابتدا یک قطعه ثبت کنید.", "Add at least one part first.")
+                return
+            }
+            if (rejectPartsThatDoNotFit(independentParts, sw, sh)) return
+            val packed = CuttingCalculator.packParts(independentParts, sw, sh, kerf)
             latestPlacements = packed.placements
             latestSheetW = sw; latestSheetH = sh; latestSheetCount = packed.sheetCount; selectedSheetIndex = 0
             updateSheetNavigation(); layoutView.invalidate()
-            val area = width * length * qty
+            val area = independentParts.sumOf { it.width * it.height * it.quantity }
             val totalArea = latestSheetCount * sw * sh
             val waste = if (totalArea > 0) max(0.0, (totalArea - area) / totalArea * 100.0) else 0.0
             metricSheets.text = if (english) latestSheetCount.toString() else faDigits(latestSheetCount.toString())
             metricWaste.text = if (english) "${fmt(waste)}%" else faDigits("${fmt(waste)}٪")
-            metricPieces.text = if (english) qty.toString() else faDigits(qty.toString())
-            resultText.text = if (english) "$name: ${fmt(length)} × ${fmt(width)} mm, quantity $qty, board thickness ${fmt(thickness)} mm. Dimensions used without automatic adjustment." else "$name: ${faDigits(fmt(length))} × ${faDigits(fmt(width))} میلی‌متر؛ تعداد ${faDigits(qty.toString())}؛ ضخامت ${faDigits(fmt(thickness))} میلی‌متر. ابعاد بدون تغییر خودکار استفاده شدند."
+            val pieceCount = independentParts.sumOf { it.quantity }
+            metricPieces.text = if (english) pieceCount.toString() else faDigits(pieceCount.toString())
+            val details = independentParts.joinToString("\n") { "${it.name}: ${fmt(it.height)} × ${fmt(it.width)} mm × ${it.quantity}" }
+            resultText.text = if (english) "Independent parts:\n$details\nDimensions used without automatic adjustment." else "قطعات مستقل ثبت‌شده:\n${faDigits(details)}\nابعاد بدون تغییر خودکار استفاده شدند."
             partsList.removeAllViews()
             partsList.addView(TextView(this).apply { text = resultText.text; setTextColor(ink); textSize = 14f; setPadding(dp(8), dp(8), dp(8), dp(8)) })
             return
