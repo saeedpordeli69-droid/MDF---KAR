@@ -150,6 +150,8 @@ internal class ProductPreviewView(context: Context) : View(context) {
             val y = t + (baseTop - t) * i / (shelves.coerceAtMost(8) + 1f)
             line(c, l + 2f, y, r - 2f, y, 2f)
         }
+        // Match the vertical divider that is included in the generated bookcase cut list.
+        line(c, l + fw * 0.5f, t + 2f, l + fw * 0.5f, baseTop - 2f, 2f)
         when (bookcaseBase) {
             0 -> drawModule(c, l + 3f, baseTop + 2f, r - 3f, b - 2f, 1)
             1 -> drawModule(c, l + 3f, baseTop + 2f, r - 3f, b - 2f, 0)
