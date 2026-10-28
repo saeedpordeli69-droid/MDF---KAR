@@ -99,6 +99,10 @@ internal class ProductPreviewView(context: Context) : View(context) {
             6 -> drawDecor(canvas, left, top, right, bottom, fw, fh)
             else -> drawCabinetLike(canvas, left, top, right, bottom, fw, fh)
         }
+        if (productType == 7) {
+            // The vanity cut list contains a separate countertop panel.
+            fill(canvas, RectF(left - 2f, top - 2f, right + 2f, top + max(5f, fh * 0.045f)), 0xFF8EAAB6.toInt())
+        }
         line(canvas, left, bottom + 9f, right, bottom + 9f, 1f)
         label(canvas, "${widthMm.toInt()} × ${heightMm.toInt()} × ${depthMm.toInt()} mm", w / 2f, h - 10f, 11f, 0xFFB8D6E9.toInt())
     }
@@ -108,7 +112,10 @@ internal class ProductPreviewView(context: Context) : View(context) {
         line(c, mid, t + 3f, mid, b - 2f, 2f)
         drawModule(c, l + 3f, t + 3f, mid - 2f, b - 3f, leftModule)
         drawModule(c, mid + 2f, t + 3f, r - 3f, b - 3f, rightModule)
-        // Highlight the worktop.
+        // The generated cut list includes one bottom panel per module.
+        line(c, l + 3f, b - fh * 0.035f, mid - 2f, b - fh * 0.035f, 2f)
+        line(c, mid + 2f, b - fh * 0.035f, r - 3f, b - fh * 0.035f, 2f)
+        // Highlight the separately generated worktop.
         line(c, l, t + 2f, r, t + 2f, 3f)
     }
 
@@ -145,13 +152,16 @@ internal class ProductPreviewView(context: Context) : View(context) {
     private fun drawBookcase(c: Canvas, l: Float, t: Float, r: Float, b: Float, fw: Float, fh: Float) {
         val baseH = (fh * (bookcaseBaseHeight / heightMm).toFloat()).coerceIn(fh * 0.18f, fh * 0.72f)
         val baseTop = b - baseH
+        val dividerX = l + fw * 0.5f
         line(c, l + 2f, baseTop, r - 2f, baseTop, 2.5f)
+        // Each upper shelf is two separate pieces because the vertical divider splits it.
         for (i in 1..shelves.coerceAtMost(8)) {
             val y = t + (baseTop - t) * i / (shelves.coerceAtMost(8) + 1f)
-            line(c, l + 2f, y, r - 2f, y, 2f)
+            line(c, l + 2f, y, dividerX - 2f, y, 2f)
+            line(c, dividerX + 2f, y, r - 2f, y, 2f)
         }
         // Match the vertical divider that is included in the generated bookcase cut list.
-        line(c, l + fw * 0.5f, t + 2f, l + fw * 0.5f, baseTop - 2f, 2f)
+        line(c, dividerX, t + 2f, dividerX, baseTop - 2f, 2f)
         when (bookcaseBase) {
             0 -> drawModule(c, l + 3f, baseTop + 2f, r - 3f, b - 2f, 1)
             1 -> drawModule(c, l + 3f, baseTop + 2f, r - 3f, b - 2f, 0)
@@ -165,15 +175,22 @@ internal class ProductPreviewView(context: Context) : View(context) {
     private fun drawDesk(c: Canvas, l: Float, t: Float, r: Float, b: Float, fw: Float, fh: Float) {
         val topH = max(5f, fh * 0.08f)
         fill(c, RectF(l, t, r, t + topH), 0xFF839DA9.toInt())
-        val legW = max(5f, fw * 0.09f)
-        fill(c, RectF(l + fw * 0.08f, t + topH, l + fw * 0.08f + legW, b), 0xFF8EA5AE.toInt())
-        fill(c, RectF(r - fw * 0.08f - legW, t + topH, r - fw * 0.08f, b), 0xFF8EA5AE.toInt())
+        // The cut list creates four 90 mm leg panels; show all four in the preview.
+        val legW = max(4f, fw * (90.0 / widthMm).toFloat()).coerceAtMost(fw * 0.18f)
+        val inset = fw * 0.08f
+        val backInset = fw * 0.14f
+        val backColor = 0xFF7895A4.toInt()
+        fill(c, RectF(l + backInset, t + topH, l + backInset + legW, b), backColor)
+        fill(c, RectF(r - backInset - legW, t + topH, r - backInset, b), backColor)
+        fill(c, RectF(l + inset, t + topH, l + inset + legW, b), 0xFF8EA5AE.toInt())
+        fill(c, RectF(r - inset - legW, t + topH, r - inset, b), 0xFF8EA5AE.toInt())
         line(c, l + legW, t + fh * 0.68f, r - legW, t + fh * 0.68f, 3f)
     }
 
     private fun drawDecor(c: Canvas, l: Float, t: Float, r: Float, b: Float, fw: Float, fh: Float) {
-        for (i in 1..3) {
-            val x = l + fw * i / 4f
+        // The generator creates two vertical decor strips, so show two divisions.
+        for (i in 1..2) {
+            val x = l + fw * i / 3f
             line(c, x, t + 3f, x, b - 3f, 2f)
         }
         for (i in 1..shelves.coerceAtMost(4)) {
