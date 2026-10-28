@@ -102,6 +102,8 @@ class MainActivity : Activity() {
     internal lateinit var priceEstimateText: TextView
     internal val orderCabinets = mutableListOf<CabinetSpec>()
     internal val customParts = mutableListOf<CustomOrderPart>()
+    // True when the selected product family is Cabinet; other product families use registered parts.
+    internal var selectedProductIsCabinet: Boolean = true
     // Independent cuts are kept in their own list, separate from legacy/custom cabinet parts.
     internal val independentParts = mutableListOf<CustomOrderPart>()
     internal lateinit var orderListView: LinearLayout
@@ -517,15 +519,18 @@ class MainActivity : Activity() {
     }
 
     internal fun calculate() {
-        // If the user has already added cabinets to the order, include registered independent
-        // parts in that same cutting plan instead of calculating them as a separate job.
-        if (orderCabinets.isNotEmpty()) {
+        // Cabinet orders are calculated together only while the Cabinet product family is selected.
+        if (selectedProductIsCabinet && orderCabinets.isNotEmpty()) {
             calculateMultiCabinetOrder()
             return
         }
-        // Independent cutting uses the dimensions entered directly in its form; no separate
-        // "custom cutting"/add-part workflow is required.
+        // Non-cabinet product families must use the registered parts list, not silently
+        // calculate the default values in the input fields as an unregistered part.
         if (cabinetSpinner.selectedItemPosition == 0) {
+            if (!selectedProductIsCabinet && independentParts.isEmpty()) {
+                resultText.text = tr("ابتدا قطعه را با دکمهٔ «افزودن قطعه» ثبت کنید.", "Register at least one part with Add part before calculating.")
+                return
+            }
             val name = customPartNameInput.text.toString().trim().ifBlank { tr("قطعه مستقل", "Independent part") }
             val length = number(customPartLengthInput.text.toString())
             val width = number(customPartWidthInput.text.toString())
@@ -535,7 +540,7 @@ class MainActivity : Activity() {
                 resultText.text = tr("نام قطعه، طول، عرض، ضخامت و تعداد معتبر وارد کنید.", "Enter a part name, valid length, width, thickness and quantity.")
                 return
             }
-            orderCabinets.clear()
+            if (selectedProductIsCabinet) orderCabinets.clear()
             val sw = number(sheetWidthInput.text.toString())
             val sh = number(sheetHeightInput.text.toString())
             val kerf = number(kerfInput.text.toString())
@@ -568,7 +573,7 @@ class MainActivity : Activity() {
             partsList.addView(TextView(this).apply { text = resultText.text; setTextColor(ink); textSize = 14f; setPadding(dp(8), dp(8), dp(8), dp(8)) })
             return
         }
-        if (orderCabinets.isNotEmpty() || customParts.isNotEmpty() || independentParts.isNotEmpty()) {
+        if (selectedProductIsCabinet && (orderCabinets.isNotEmpty() || customParts.isNotEmpty() || independentParts.isNotEmpty())) {
             calculateMultiCabinetOrder()
             return
         }
