@@ -289,6 +289,36 @@ internal fun MainActivity.buildScreen() {
         addTo(independentCutCard, fieldCell("نام قطعه", "Part name", customPartNameInput), 5)
         pairedRow(independentCutCard, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
         pairedRow(independentCutCard, fieldCell("تعداد", "Quantity", customPartQtyInput), fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput))
+        customPartsListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        addTo(independentCutCard, button("＋ ثبت قطعه در فهرست", "+ Add part to list") {
+            val name = customPartNameInput.text.toString().trim()
+            val length = number(customPartLengthInput.text.toString())
+            val width = number(customPartWidthInput.text.toString())
+            val qty = number(customPartQtyInput.text.toString())?.toInt()
+            val thickness = number(customPartThicknessInput.text.toString())
+            if (name.isBlank() || length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0) {
+                Toast.makeText(this, tr("نام، طول، عرض، ضخامت و تعداد معتبر وارد کنید.", "Enter a name and valid dimensions, thickness and quantity."), Toast.LENGTH_LONG).show()
+            } else {
+                customParts += CustomOrderPart(name, length, width, qty, thickness)
+                refreshCustomPartsList()
+                customPartNameInput.setText("")
+                Toast.makeText(this, tr("قطعه به فهرست اضافه شد.", "Part added to list."), Toast.LENGTH_SHORT).show()
+            }
+        }, 5)
+        addTo(independentCutCard, customPartsListView, 8)
+
+        // The selected mode controls which input card is visible.
+        fun updateModeVisibility() {
+            val independent = cabinetSpinner.selectedItemPosition == 0
+            independentCutCard.visibility = if (independent) View.VISIBLE else View.GONE
+            cabinetCard.visibility = if (independent) View.GONE else View.VISIBLE
+            prefs().edit().putInt("cabinetType", cabinetSpinner.selectedItemPosition).apply()
+        }
+        cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) = updateModeVisibility()
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        }
+        updateModeVisibility()
 
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
