@@ -565,21 +565,19 @@ internal fun MainActivity.buildScreen() {
                 productLeftModuleSpinner.selectedItemPosition, productRightModuleSpinner.selectedItemPosition,
                 drawers, bookcaseBaseTypeSpinner.selectedItemPosition, baseH, english
             )
-            if (::productCutListPreview.isInitialized) {
-                if (selectedProductIsCabinet) {
-                    productCutListPreview.text = tr("برای نمایش فهرست قطعات، ابتدا یک محصول غیرکابینتی انتخاب کنید.", "Select a non-cabinet product to preview its cut list.")
+            if (selectedProductIsCabinet) {
+                productCutListPreview.text = tr("برای نمایش فهرست قطعات، ابتدا یک محصول غیرکابینتی انتخاب کنید.", "Select a non-cabinet product to preview its cut list.")
+            } else {
+                val generated = generateAutomaticProductParts(showErrors = false)
+                productCutListPreview.text = if (generated == null) {
+                    tr("ابعاد یا تنظیمات ماژول هنوز معتبر نیست.", "Dimensions or module settings are not valid yet.")
                 } else {
-                    val generated = generateAutomaticProductParts(showErrors = false)
-                    productCutListPreview.text = if (generated == null) {
-                        tr("ابعاد یا تنظیمات ماژول هنوز معتبر نیست.", "Dimensions or module settings are not valid yet.")
-                    } else {
-                        val lines = generated.take(16).map { part ->
-                            "• ${part.name}: ${if (english) fmt(part.lengthMm) else faDigits(fmt(part.lengthMm))} × ${if (english) fmt(part.widthMm) else faDigits(fmt(part.widthMm))} mm  |  ${tr("تعداد", "qty")} ${if (english) part.quantity.toString() else faDigits(part.quantity.toString())}  |  ${if (english) fmt(part.thicknessMm) else faDigits(fmt(part.thicknessMm))} mm"
-                        }
-                        val remaining = generated.size - 16
-                        val more = if (remaining > 0) "\n… ${if (english) remaining.toString() else faDigits(remaining.toString())} ${tr("نوع قطعه دیگر", "more part types")}" else ""
-                        lines.joinToString("\n") + more
+                    val lines = generated.take(16).map { part ->
+                        "• ${part.name}: ${if (english) fmt(part.lengthMm) else faDigits(fmt(part.lengthMm))} × ${if (english) fmt(part.widthMm) else faDigits(fmt(part.widthMm))} mm  |  ${tr("تعداد", "qty")} ${if (english) part.quantity.toString() else faDigits(part.quantity.toString())}  |  ${if (english) fmt(part.thicknessMm) else faDigits(fmt(part.thicknessMm))} mm"
                     }
+                    val remaining = generated.size - 16
+                    val more = if (remaining > 0) "\n… ${if (english) remaining.toString() else faDigits(remaining.toString())} ${tr("نوع قطعه دیگر", "more part types")}" else ""
+                    lines.joinToString("\n") + more
                 }
             }
         }
