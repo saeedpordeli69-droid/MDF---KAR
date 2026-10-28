@@ -174,3 +174,7 @@ data class OrderPriceEstimate(
 ) {
     val subtotal: Double get() = board + edging + hardware + labor + transport + other
 }
+
+
+// Compatibility alias for existing UI and activity code.
+typealias PriceEstimate = OrderPriceEstimate
