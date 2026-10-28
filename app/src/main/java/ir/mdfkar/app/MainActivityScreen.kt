@@ -524,6 +524,15 @@ internal fun MainActivity.buildScreen() {
             setPadding(dp(2), dp(6), dp(2), dp(4))
         }, 3)
         productDetailsCard.addView(productPreviewView, LinearLayout.LayoutParams(-1, dp(245)).apply { bottomMargin = dp(10) })
+        productCutListPreview = TextView(this).apply {
+            text = tr("فهرست قطعات پیشنهادی پس از واردکردن ابعاد نمایش داده می‌شود.", "The suggested cut list appears after valid dimensions are entered.")
+            textSize = 11f
+            setTextColor(AppTheme.TEXT_SECONDARY)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = rounded(Color.rgb(7, 27, 49), 10, Color.rgb(35, 100, 150), 1)
+        }
+        addTo(productDetailsCard, label("فهرست زنده قطعات (میلی‌متر)", "Live cut list (mm)", 13f), 3)
+        productDetailsCard.addView(productCutListPreview, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
         val productOrderCard = addSection(
             productDetailsCard,
@@ -556,13 +565,31 @@ internal fun MainActivity.buildScreen() {
                 productLeftModuleSpinner.selectedItemPosition, productRightModuleSpinner.selectedItemPosition,
                 drawers, bookcaseBaseTypeSpinner.selectedItemPosition, baseH, english
             )
+            if (::productCutListPreview.isInitialized) {
+                if (selectedProductIsCabinet) {
+                    productCutListPreview.text = tr("برای نمایش فهرست قطعات، ابتدا یک محصول غیرکابینتی انتخاب کنید.", "Select a non-cabinet product to preview its cut list.")
+                } else {
+                    val generated = generateAutomaticProductParts(showErrors = false)
+                    productCutListPreview.text = if (generated == null) {
+                        tr("ابعاد یا تنظیمات ماژول هنوز معتبر نیست.", "Dimensions or module settings are not valid yet.")
+                    } else {
+                        val lines = generated.take(16).map { part ->
+                            "• ${part.name}: ${if (english) fmt(part.lengthMm) else faDigits(fmt(part.lengthMm))} × ${if (english) fmt(part.widthMm) else faDigits(fmt(part.widthMm))} mm  |  ${tr("تعداد", "qty")} ${if (english) part.quantity.toString() else faDigits(part.quantity.toString())}  |  ${if (english) fmt(part.thicknessMm) else faDigits(fmt(part.thicknessMm))} mm"
+                        }
+                        val remaining = generated.size - 16
+                        val more = if (remaining > 0) "\n… ${if (english) remaining.toString() else faDigits(remaining.toString())} ${tr("نوع قطعه دیگر", "more part types")}" else ""
+                        lines.joinToString("\n") + more
+                    }
+                }
+            }
         }
         val previewWatcher = object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { updateProductPreview() }
             override fun afterTextChanged(s: android.text.Editable?) = Unit
         }
-        listOf(productWidthInput, productHeightInput, productDepthInput, productThicknessInput, productShelfInput, productDoorInput, productDrawerCountInput, bookcaseBaseHeightInput).forEach { it.addTextChangedListener(previewWatcher) }
+        listOf(productWidthInput, productHeightInput, productDepthInput, productThicknessInput, productShelfInput, productDoorInput, productQuantityInput, productDrawerCountInput, bookcaseBaseHeightInput).forEach { it.addTextChangedListener(previewWatcher) }
+        productIncludeBackCheck.setOnCheckedChangeListener { _, _ -> updateProductPreview() }
         listOf(productLeftModuleSpinner, productRightModuleSpinner, bookcaseBaseTypeSpinner).forEach { spinner ->
             spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
