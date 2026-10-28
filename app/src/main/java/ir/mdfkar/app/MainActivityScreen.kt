@@ -430,13 +430,49 @@ internal fun MainActivity.buildScreen() {
         // spinner callback ran too early and the independent-mode code hid the Add/list views.
         applyCuttingMode(cabinetSpinner.selectedItemPosition)
 
+        // Non-cabinet product form: dimensions of the whole item generate a cutting list automatically.
+        val productDetailsCard = addSection(
+            homePage, "ابعاد کلی محصول", "Overall product dimensions",
+            "ابعاد کلی را وارد کنید؛ قطعات و نقشه برش به‌صورت خودکار ساخته می‌شوند.",
+            "Enter overall dimensions; components and the cutting plan are generated automatically."
+        ).apply { visibility = View.GONE }
+        productWidthInput = field("عرض کلی (mm)", "Overall width (mm)", "productWidth", "۱۲۰۰")
+        productHeightInput = field("ارتفاع کلی (mm)", "Overall height (mm)", "productHeight", "۱۸۰۰")
+        productDepthInput = field("عمق کلی (mm)", "Overall depth (mm)", "productDepth", "۵۰۰")
+        productThicknessInput = field("ضخامت ورق (mm)", "Board thickness (mm)", "productThickness", "۱۶")
+        productShelfInput = field("تعداد طبقه", "Number of shelves", "productShelves", "۳")
+        productDoorInput = field("تعداد در", "Number of doors", "productDoors", "۲")
+        productQuantityInput = field("تعداد محصول مشابه", "Number of identical products", "productQuantity", "۱")
+        pairedRow(productDetailsCard, fieldCell("عرض کلی (mm)", "Overall width (mm)", productWidthInput), fieldCell("ارتفاع کلی (mm)", "Overall height (mm)", productHeightInput))
+        pairedRow(productDetailsCard, fieldCell("عمق کلی (mm)", "Overall depth (mm)", productDepthInput), fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", productThicknessInput))
+        val productShelvesField = fieldCell("تعداد طبقه", "Number of shelves", productShelfInput)
+        addTo(productDetailsCard, productShelvesField, 5)
+        val productDoorsField = fieldCell("تعداد در", "Number of doors", productDoorInput)
+        addTo(productDetailsCard, productDoorsField, 5)
+        addTo(productDetailsCard, label("تعداد محصول با همین ابعاد", "Quantity with these dimensions", 12f), 2)
+        addTo(productDetailsCard, productQuantityInput, 5)
+        productIncludeBackCheck = CheckBox(this).apply {
+            text = tr("ساخت قطعهٔ پشت‌بند", "Include a back panel")
+            isChecked = true
+            setTextColor(AppTheme.TEXT)
+            buttonTintList = android.content.res.ColorStateList.valueOf(AppTheme.ACCENT)
+        }
+        addTo(productDetailsCard, productIncludeBackCheck, 3)
+        val productRecipeHint = TextView(this).apply {
+            textSize = 12f
+            setTextColor(AppTheme.TEXT_SECONDARY)
+            setPadding(dp(3), dp(4), dp(3), dp(3))
+        }
+        addTo(productDetailsCard, productRecipeHint, 2)
+
+        var lastProductDefaults = listOf(1200.0, 1800.0, 500.0)
         fun applyProductSelection(position: Int) {
+            selectedProductTypeIndex = position
             selectedProductIsCabinet = position == 0
             if (position == 0) {
-                // Restore the cabinet form and its order controls.
-                for (index in 2..14) {
-                    if (index < cabinetCard.childCount) cabinetCard.getChildAt(index).visibility = View.VISIBLE
-                }
+                // Keep the established cabinet form unchanged.
+                cabinetCard.visibility = View.VISIBLE
+                productDetailsCard.visibility = View.GONE
                 if (cabinetSpinner.selectedItemPosition == 0) cabinetSpinner.setSelection(1)
                 runCatching { applyCuttingMode(cabinetSpinner.selectedItemPosition) }
                 cabinetCardTitle.text = "◆  ${tr("مشخصات کابینت", "Cabinet specifications")}"
@@ -446,23 +482,65 @@ internal fun MainActivity.buildScreen() {
                     "Cabinet: enter carcass dimensions and add the cabinet to the order."
                 )
             } else {
-                // Non-cabinet products use the registered-parts workflow. Hide cabinet-only
-                // dimensions and order buttons so selecting a product visibly changes the form.
+                // Apply sensible dimensions for the newly selected family only when the user has
+                // not changed the previous family's defaults; preserve manually entered dimensions.
+                val defaults = when (position) {
+                    1 -> listOf(1200.0, 2200.0, 600.0) // wardrobe
+                    2 -> listOf(1000.0, 1800.0, 300.0) // bookcase
+                    3 -> listOf(1200.0, 750.0, 600.0) // desk/table
+                    4 -> listOf(1500.0, 1000.0, 600.0) // shop counter
+                    5 -> listOf(1800.0, 1100.0, 700.0) // reception counter
+                    6 -> listOf(1800.0, 2000.0, 300.0) // TV wall
+                    7 -> listOf(900.0, 800.0, 500.0) // vanity
+                    else -> listOf(1200.0, 900.0, 500.0)
+                }
+                val dimensionInputs = listOf(productWidthInput, productHeightInput, productDepthInput)
+                dimensionInputs.forEachIndexed { index, input ->
+                    if (number(input.text.toString()) == lastProductDefaults[index]) {
+                        val value = defaults[index].toInt().toString()
+                        input.setText(if (english) value else faDigits(value))
+                    }
+                }
+                lastProductDefaults = defaults
+                productShelvesField.visibility = if (position in listOf(1, 2, 4, 5, 6, 7, 8)) View.VISIBLE else View.GONE
+                productDoorsField.visibility = if (position in listOf(1, 7, 8)) View.VISIBLE else View.GONE
+                productIncludeBackCheck.visibility = if (position in listOf(1, 2, 4, 7, 8)) View.VISIBLE else View.GONE
+                // Non-cabinet products have their own overall-dimensions form and auto-generated parts.
+                cabinetCard.visibility = View.GONE
+                productDetailsCard.visibility = View.VISIBLE
                 cabinetSpinner.setSelection(0)
                 runCatching { applyCuttingMode(0) }
-                for (index in 2..14) {
-                    if (index < cabinetCard.childCount) cabinetCard.getChildAt(index).visibility = View.GONE
-                }
-                customPartsSection.visibility = View.VISIBLE
-                refreshIndependentPartsList()
                 val selectedName = productTypeSpinner.selectedItem?.toString().orEmpty()
-                cabinetCardTitle.text = if (english) "◆  $selectedName parts" else "◆  قطعات $selectedName"
-                cabinetCardSubtitle.text = tr("ابعاد قطعات را وارد و هر قطعه را ثبت کنید", "Enter dimensions and register each part")
-                productTypeHint.text = if (english) {
-                    "$selectedName: enter each component as a part below, tap Add part to register it, then calculate the cutting plan."
-                } else {
-                    "$selectedName: ابعاد هر قطعه را در فرم پایین وارد کنید، «افزودن قطعه» را بزنید تا ثبت شود، سپس نقشهٔ برش را محاسبه کنید."
+                val productNamesFa = arrayOf("کابینت", "کمد", "کتابخانه و قفسه", "میز", "پیشخوان فروشگاهی", "پیشخوان اداری", "دیوار تلویزیون و دکور", "کابینت روشویی", "محصول سفارشی")
+                val productNamesEn = arrayOf("Cabinet", "Wardrobe", "Bookcase / Shelving", "Desk / Table", "Shop counter", "Reception counter", "TV wall / Decor", "Bathroom vanity", "Custom product")
+                val productName = if (english) productNamesEn[position.coerceIn(0, productNamesEn.lastIndex)] else productNamesFa[position.coerceIn(0, productNamesFa.lastIndex)]
+                val recipeFa = when (position) {
+                    1 -> "قطعات کمد: دو بغل، بالا و پایین، طبقه‌ها، درها و در صورت انتخاب پشت‌بند."
+                    2 -> "قطعات کتابخانه: بغل‌ها، بالا و پایین، طبقه‌ها، تقسیم‌کننده و پشت‌بند."
+                    3 -> "قطعات میز: صفحه، چهار پایه و تیرک‌های زیر صفحه."
+                    4 -> "قطعات پیشخوان فروشگاهی: نمای جلو، دو بغل، صفحه روی پیشخوان و طبقه‌ها."
+                    5 -> "قطعات کانتر اداری: نمای جلو، دو بغل، صفحه کار و طبقه‌های داخلی."
+                    6 -> "قطعات دکور: پنل اصلی، نوارهای عمودی و طبقه‌های دکور."
+                    7 -> "قطعات روشویی: بغل‌ها، بالا و پایین، طبقه‌ها، درها، صفحه و پشت‌بند."
+                    else -> "قطعات محصول سفارشی بر اساس الگوی بدنه، طبقه‌ها و درها ساخته می‌شوند."
                 }
+                val recipeEn = when (position) {
+                    1 -> "Wardrobe: sides, top/bottom, shelves, doors and optional back panel."
+                    2 -> "Bookcase: sides, top/bottom, shelves, divider and back panel."
+                    3 -> "Desk/table: top, four leg panels and support aprons."
+                    4 -> "Shop counter: front, two sides, countertop and shelves."
+                    5 -> "Reception counter: front, two sides, worktop and inner shelves."
+                    6 -> "TV wall/decor: main panel, vertical strips and display shelves."
+                    7 -> "Vanity: sides, top/bottom, shelves, doors, top and optional back panel."
+                    else -> "Custom product: carcass panels, shelves, doors and optional back panel."
+                }
+                cabinetCardTitle.text = "◆  $productName"
+                cabinetCardSubtitle.text = tr("فرم تخصصی و تولید خودکار قطعات", "Product-specific form and automatic part generation")
+                productRecipeHint.text = tr(recipeFa, recipeEn)
+                productTypeHint.text = tr(
+                    "ابعاد کلی $productName را وارد کنید. برنامه قطعات پیشنهادی را می‌سازد و در صفحه بعد نقشه برش را نمایش می‌دهد.",
+                    "Enter the overall dimensions for $productName. The app generates suggested components and shows the cutting layout on the next page."
+                )
             }
         }
         productTypeSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
