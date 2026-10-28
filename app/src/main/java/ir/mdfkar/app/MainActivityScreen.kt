@@ -226,25 +226,6 @@ internal fun MainActivity.buildScreen() {
             dropDownWidth = ViewGroup.LayoutParams.MATCH_PARENT
         }
         addTo(cabinetCard, cabinetSpinner, 8)
-        cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                // Selection now visibly switches between direct independent-part entry and
-                // the normal cabinet dimension form.
-                runCatching {
-                    val independent = position == 0
-                    customPartsSection.visibility = if (independent) View.VISIBLE else View.GONE
-                    customPartsToggleButton.visibility = View.GONE
-                    customPartModeSpinner.setSelection(0)
-                    updateCustomPartsToggleLabel()
-                    if (::customPartsSection.isInitialized) {
-                        // Hide the old linked/custom-part workflow: independent cutting is direct.
-                        for (index in 4..8) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
-                        for (index in 9..11) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
-                    }
-                }
-            }
-        }
         widthInput = field("عرض کابینت", "Cabinet width", "width", "۸۰۰")
         heightInput = field("ارتفاع کابینت", "Cabinet height", "height", "۷۲۰")
         depthInput = field("عمق کابینت", "Cabinet depth", "depth", "۵۶۰")
@@ -298,6 +279,12 @@ internal fun MainActivity.buildScreen() {
             Toast.makeText(this, tr("سفارش پاک شد؛ محاسبه دوباره از مشخصات فعلی انجام می‌شود.", "Order cleared; calculation will use current dimensions."), Toast.LENGTH_SHORT).show()
         }, 8)
 
+        // Initialize the section before creating a click listener that references it.
+        // Kotlin otherwise rejects access to the lateinit property's backing field here.
+        customPartsSection = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
         customPartsToggleButton = button("＋ قطعات سفارشی (۰)", "+ Custom parts (0)") {
             customPartsSection.visibility = if (customPartsSection.visibility == View.VISIBLE) View.GONE else View.VISIBLE
             updateCustomPartsToggleLabel()
@@ -306,10 +293,6 @@ internal fun MainActivity.buildScreen() {
             textSize = 13f
         }
         addTo(cabinetCard, customPartsToggleButton, 7)
-        customPartsSection = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
-        }
         addTo(cabinetCard, customPartsSection, 2)
         addTo(customPartsSection, TextView(this).apply {
             text = tr("قطعهٔ مستقل یا وابسته به ابعاد کابینت اضافه کنید.", "Add a standalone part or one linked to cabinet dimensions.")
@@ -361,6 +344,27 @@ internal fun MainActivity.buildScreen() {
             customParts.clear(); refreshCustomPartsList()
             Toast.makeText(this, tr("قطعات سفارشی پاک شدند.", "Custom parts cleared."), Toast.LENGTH_SHORT).show()
         }, 8)
+
+        // Set the selector listener only after all referenced views are initialized.
+        val partsSectionRef = customPartsSection
+        val partsToggleRef = customPartsToggleButton
+        val partModeSpinnerRef = customPartModeSpinner
+        cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val independent = position == 0
+                partsSectionRef.visibility = if (independent) View.VISIBLE else View.GONE
+                partsToggleRef.visibility = View.GONE
+                partModeSpinnerRef.setSelection(0)
+                updateCustomPartsToggleLabel()
+                for (index in 4..8) {
+                    if (index < partsSectionRef.childCount) partsSectionRef.getChildAt(index).visibility = View.GONE
+                }
+                for (index in 9..11) {
+                    if (index < partsSectionRef.childCount) partsSectionRef.getChildAt(index).visibility = View.GONE
+                }
+            }
+        }
 
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
