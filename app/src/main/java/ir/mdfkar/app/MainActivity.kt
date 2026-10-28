@@ -499,6 +499,12 @@ class MainActivity : Activity() {
     }
 
     internal fun calculate() {
+        // If the user has already added cabinets to the order, include registered independent
+        // parts in that same cutting plan instead of calculating them as a separate job.
+        if (orderCabinets.isNotEmpty()) {
+            calculateMultiCabinetOrder()
+            return
+        }
         // Independent cutting uses the dimensions entered directly in its form; no separate
         // "custom cutting"/add-part workflow is required.
         if (cabinetSpinner.selectedItemPosition == 0) {
