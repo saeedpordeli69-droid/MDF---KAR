@@ -237,17 +237,20 @@ internal fun MainActivity.buildScreen() {
             }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         }
         addTo(productTypeCard, productTypeSpinner, 2)
-        addTo(productTypeCard, TextView(this).apply {
+        val productTypeHint = TextView(this).apply {
             text = tr(
-                "انتخاب نوع محصول فعلاً به‌صورت رابط کاربری اضافه شده است؛ اتصال هر نوع به فرم و محاسبات در مرحله بعد انجام می‌شود.",
-                "Product selection is added as UI; connecting each type to its own form and calculations comes in the next step."
+                "برای کابینت از فرم ابعاد کابینت استفاده کنید. سایر محصولات فعلاً با ثبت قطعات و نقشهٔ برش محاسبه می‌شوند.",
+                "Cabinets use the cabinet form. Other product families currently use entered parts and the cutting-plan workflow."
             )
             textSize = 11f
             setTextColor(AppTheme.TEXT_SECONDARY)
             setPadding(0, dp(4), 0, 0)
-        }, 1)
+        }
+        addTo(productTypeCard, productTypeHint, 1)
 
         val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
+        val cabinetCardTitle = cabinetCard.getChildAt(0) as TextView
+        val cabinetCardSubtitle = cabinetCard.getChildAt(1) as TextView
         cabinetSpinner = Spinner(this).apply {
             val cabinetTypes = if (english) arrayOf("Independent cutting", "Base cabinet", "Wall cabinet") else arrayOf("برش مستقل", "کابینت زمینی", "کابینت دیواری")
             adapter = object : ArrayAdapter<String>(this@buildScreen, android.R.layout.simple_spinner_item, cabinetTypes) {
@@ -274,24 +277,27 @@ internal fun MainActivity.buildScreen() {
             dropDownWidth = ViewGroup.LayoutParams.MATCH_PARENT
         }
         addTo(cabinetCard, cabinetSpinner, 8)
+        fun applyCuttingMode(position: Int) {
+            val independent = position == 0
+            customPartsSection.visibility = if (independent) View.VISIBLE else View.GONE
+            customPartsToggleButton.visibility = if (independent) View.GONE else View.VISIBLE
+            customPartModeSpinner.setSelection(0)
+            // Child indexes 4..8 are the linked/standalone mode controls. Keep the
+            // thickness field, registered-parts list, Add button and Clear button visible.
+            for (index in 4..8) {
+                if (index < customPartsSection.childCount) {
+                    customPartsSection.getChildAt(index).visibility = if (independent) View.GONE else View.VISIBLE
+                }
+            }
+            if (independent) refreshIndependentPartsList() else refreshCustomPartsList()
+            updateCustomPartsToggleLabel()
+        }
+
         cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                // Selection now visibly switches between direct independent-part entry and
-                // the normal cabinet dimension form.
-                runCatching {
-                    val independent = position == 0
-                    customPartsSection.visibility = if (independent) View.VISIBLE else View.GONE
-                    customPartsToggleButton.visibility = View.GONE
-                    customPartModeSpinner.setSelection(0)
-                    updateCustomPartsToggleLabel()
-                    // This is an extension function, so Kotlin does not allow checking
-                    // a member property's backing field with ::property.isInitialized here.
-                    // The surrounding runCatching safely ignores the initial callback that
-                    // may occur before customPartsSection has been created.
-                    for (index in 4..8) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
-                    for (index in 9..11) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
-                }
+                // The spinner can fire before its form is built; apply again after setup below.
+                runCatching { applyCuttingMode(position) }
             }
         }
         widthInput = field("عرض کابینت", "Cabinet width", "width", "۸۰۰")
@@ -388,16 +394,21 @@ internal fun MainActivity.buildScreen() {
         addTo(customPartsSection, customPartDimensionSpinner, 6)
         customPartsListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         addTo(customPartsSection, customPartsListView, 5)
-        addTo(customPartsSection, button("＋ افزودن قطعه سفارشی", "+ Add custom part") {
+        addTo(customPartsSection, button("＋ افزودن قطعه", "+ Add part") {
             val name = customPartNameInput.text.toString().trim()
             val length = number(customPartLengthInput.text.toString())
             val width = number(customPartWidthInput.text.toString())
             val qty = number(customPartQtyInput.text.toString())?.toInt()
             val thickness = number(customPartThicknessInput.text.toString())
-            val linked = customPartModeSpinner.selectedItemPosition == 1
+            val independent = cabinetSpinner.selectedItemPosition == 0
+            val linked = !independent && customPartModeSpinner.selectedItemPosition == 1
             val cabinetIndex = customPartCabinetSpinner.selectedItemPosition
             if (name.isBlank() || length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0 || (linked && cabinetIndex !in orderCabinets.indices)) {
-                Toast.makeText(this, tr("نام، ابعاد، ضخامت و تعداد را بررسی کنید. برای قطعه وابسته ابتدا کابینت را به سفارش اضافه کنید.", "Check name, dimensions, thickness and quantity. Add a cabinet before linking a part."), Toast.LENGTH_LONG).show()
+                Toast.makeText(this, tr("نام، طول، عرض، ضخامت و تعداد معتبر وارد کنید. برای قطعه وابسته ابتدا کابینت را به سفارش اضافه کنید.", "Enter a name and valid length, width, thickness and quantity. Add a cabinet before linking a part."), Toast.LENGTH_LONG).show()
+            } else if (independent) {
+                independentParts += CustomOrderPart(name, length, width, qty, thickness, null, -1)
+                refreshIndependentPartsList()
+                Toast.makeText(this, tr("قطعه مستقل ثبت شد.", "Independent part registered."), Toast.LENGTH_SHORT).show()
             } else {
                 val linkedCabinet = if (linked) orderCabinets[cabinetIndex] else null
                 val dimension = if (linked) customPartDimensionSpinner.selectedItemPosition else -1
@@ -406,10 +417,63 @@ internal fun MainActivity.buildScreen() {
                 Toast.makeText(this, tr("قطعه به سفارش اضافه شد.", "Custom part added to order."), Toast.LENGTH_SHORT).show()
             }
         }, 7)
-        addTo(customPartsSection, button("پاک کردن قطعات سفارشی", "Clear custom parts") {
-            customParts.clear(); refreshCustomPartsList()
-            Toast.makeText(this, tr("قطعات سفارشی پاک شدند.", "Custom parts cleared."), Toast.LENGTH_SHORT).show()
+        addTo(customPartsSection, button("پاک کردن قطعات", "Clear parts") {
+            if (cabinetSpinner.selectedItemPosition == 0) {
+                independentParts.clear(); refreshIndependentPartsList()
+            } else {
+                customParts.clear(); refreshCustomPartsList()
+            }
+            Toast.makeText(this, tr("فهرست قطعات پاک شد.", "Parts list cleared."), Toast.LENGTH_SHORT).show()
         }, 8)
+
+        // Apply the selected mode after all controls have been created. Previously the first
+        // spinner callback ran too early and the independent-mode code hid the Add/list views.
+        applyCuttingMode(cabinetSpinner.selectedItemPosition)
+
+        fun applyProductSelection(position: Int) {
+            selectedProductIsCabinet = position == 0
+            if (position == 0) {
+                // Restore the cabinet form and its order controls.
+                for (index in 2..14) {
+                    if (index < cabinetCard.childCount) cabinetCard.getChildAt(index).visibility = View.VISIBLE
+                }
+                if (cabinetSpinner.selectedItemPosition == 0) cabinetSpinner.setSelection(1)
+                runCatching { applyCuttingMode(cabinetSpinner.selectedItemPosition) }
+                cabinetCardTitle.text = "◆  ${tr("مشخصات کابینت", "Cabinet specifications")}"
+                cabinetCardSubtitle.text = tr("نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
+                productTypeHint.text = tr(
+                    "کابینت: ابعاد بدنه را وارد کنید و کابینت را به سفارش اضافه کنید.",
+                    "Cabinet: enter carcass dimensions and add the cabinet to the order."
+                )
+            } else {
+                // Non-cabinet products use the registered-parts workflow. Hide cabinet-only
+                // dimensions and order buttons so selecting a product visibly changes the form.
+                cabinetSpinner.setSelection(0)
+                runCatching { applyCuttingMode(0) }
+                for (index in 2..14) {
+                    if (index < cabinetCard.childCount) cabinetCard.getChildAt(index).visibility = View.GONE
+                }
+                customPartsSection.visibility = View.VISIBLE
+                refreshIndependentPartsList()
+                val selectedName = productTypeSpinner.selectedItem?.toString().orEmpty()
+                cabinetCardTitle.text = if (english) "◆  $selectedName parts" else "◆  قطعات $selectedName"
+                cabinetCardSubtitle.text = tr("ابعاد قطعات را وارد و هر قطعه را ثبت کنید", "Enter dimensions and register each part")
+                productTypeHint.text = if (english) {
+                    "$selectedName: enter each component as a part below, tap Add part to register it, then calculate the cutting plan."
+                } else {
+                    "$selectedName: ابعاد هر قطعه را در فرم پایین وارد کنید، «افزودن قطعه» را بزنید تا ثبت شود، سپس نقشهٔ برش را محاسبه کنید."
+                }
+            }
+        }
+        productTypeSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                applyProductSelection(position)
+            }
+        }
+        // Ensure the initial Cabinet selection matches the visible form instead of leaving
+        // the independent-cutting form selected under a Cabinet heading.
+        applyProductSelection(productTypeSpinner.selectedItemPosition)
 
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
