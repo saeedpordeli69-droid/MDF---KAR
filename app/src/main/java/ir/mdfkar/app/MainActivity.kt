@@ -93,6 +93,8 @@ class MainActivity : Activity() {
     internal var selectedSheetIndex = 0
     internal val orderCabinets = mutableListOf<CabinetSpec>()
     internal val customParts = mutableListOf<CustomOrderPart>()
+    // Independent cuts are kept in their own list, separate from legacy/custom cabinet parts.
+    internal val independentParts = mutableListOf<CustomOrderPart>()
     internal lateinit var orderListView: LinearLayout
     internal lateinit var customPartsListView: LinearLayout
     internal lateinit var customPartsSection: LinearLayout
@@ -525,34 +527,32 @@ class MainActivity : Activity() {
                 resultText.text = tr("ابعاد ورق و تیغه را معتبر وارد کنید.", "Enter valid sheet and saw-kerf dimensions.")
                 return
             }
-            val independentParts = if (customParts.isNotEmpty()) {
-                customParts.filter { it.linkedCabinetId == null }.map {
-                    CuttingPart(it.name, it.widthMm, it.lengthMm, it.quantity, true)
-                }
+            val partsForCut = if (independentParts.isNotEmpty()) {
+                independentParts.map { CuttingPart(it.name, it.widthMm, it.lengthMm, it.quantity, true) }
             } else listOf(CuttingPart(name, width, length, qty, true))
-            if (independentParts.isEmpty()) {
+            if (partsForCut.isEmpty()) {
                 resultText.text = tr("ابتدا یک قطعه ثبت کنید.", "Add at least one part first.")
                 return
             }
-            if (rejectPartsThatDoNotFit(independentParts, sw, sh)) return
-            val packed = CuttingCalculator.packParts(independentParts, sw, sh, kerf)
+            if (rejectPartsThatDoNotFit(partsForCut, sw, sh)) return
+            val packed = CuttingCalculator.packParts(partsForCut, sw, sh, kerf)
             latestPlacements = packed.placements
             latestSheetW = sw; latestSheetH = sh; latestSheetCount = packed.sheetCount; selectedSheetIndex = 0
             updateSheetNavigation(); layoutView.invalidate()
-            val area = independentParts.sumOf { it.width * it.height * it.quantity }
+            val area = partsForCut.sumOf { it.width * it.height * it.quantity }
             val totalArea = latestSheetCount * sw * sh
             val waste = if (totalArea > 0) max(0.0, (totalArea - area) / totalArea * 100.0) else 0.0
             metricSheets.text = if (english) latestSheetCount.toString() else faDigits(latestSheetCount.toString())
             metricWaste.text = if (english) "${fmt(waste)}%" else faDigits("${fmt(waste)}٪")
-            val pieceCount = independentParts.sumOf { it.quantity }
+            val pieceCount = partsForCut.sumOf { it.quantity }
             metricPieces.text = if (english) pieceCount.toString() else faDigits(pieceCount.toString())
-            val details = independentParts.joinToString("\n") { "${it.name}: ${fmt(it.height)} × ${fmt(it.width)} mm × ${it.quantity}" }
+            val details = partsForCut.joinToString("\n") { "${it.name}: ${fmt(it.height)} × ${fmt(it.width)} mm × ${it.quantity}" }
             resultText.text = if (english) "Independent parts:\n$details\nDimensions used without automatic adjustment." else "قطعات مستقل ثبت‌شده:\n${faDigits(details)}\nابعاد بدون تغییر خودکار استفاده شدند."
             partsList.removeAllViews()
             partsList.addView(TextView(this).apply { text = resultText.text; setTextColor(ink); textSize = 14f; setPadding(dp(8), dp(8), dp(8), dp(8)) })
             return
         }
-        if (orderCabinets.isNotEmpty() || customParts.isNotEmpty()) {
+        if (orderCabinets.isNotEmpty() || customParts.isNotEmpty() || independentParts.isNotEmpty()) {
             calculateMultiCabinetOrder()
             return
         }
@@ -774,6 +774,36 @@ class MainActivity : Activity() {
         }
     }
 
+    internal fun refreshIndependentPartsList() {
+        if (!::customPartsListView.isInitialized) return
+        customPartsListView.removeAllViews()
+        if (independentParts.isEmpty()) {
+            customPartsListView.addView(TextView(this).apply {
+                text = tr("هنوز برش مستقلی ثبت نشده است.", "No independent cuts added yet.")
+                textSize = 11f; setTextColor(muted); setPadding(dp(8), dp(5), dp(8), dp(5))
+            })
+            return
+        }
+        independentParts.forEachIndexed { index, part ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(dp(9), dp(7), dp(9), dp(7))
+                background = rounded(Color.rgb(22, 48, 63), 10, Color.rgb(45, 125, 145), 1)
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) }
+            }
+            val info = TextView(this).apply {
+                text = "${part.name} • ${fmt(part.lengthMm)}×${fmt(part.widthMm)} mm • ${tr("تعداد", "qty")} ${part.quantity} • ${fmt(part.thicknessMm)} mm"
+                textSize = 10f; setTextColor(ink); layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            }
+            row.addView(info)
+            row.addView(button("×", "×") {
+                independentParts.removeAt(index)
+                refreshIndependentPartsList()
+            }.apply { minWidth = dp(40); minHeight = dp(38) })
+            customPartsListView.addView(row)
+        }
+    }
+
     internal fun updateCustomPartsToggleLabel() {
         if (!::customPartsToggleButton.isInitialized) return
         val expanded = ::customPartsSection.isInitialized && customPartsSection.visibility == View.VISIBLE
@@ -837,6 +867,14 @@ class MainActivity : Activity() {
             val item = CuttingPart("${custom.name}${cabinet?.let { " - ${it.name}" } ?: " - ${tr("سفارشی", "Custom")}"}", referenceLength, custom.widthMm, quantity, custom.linkedCabinetId == null)
             allParts += item
             val stockKey = "MDF|${custom.thicknessMm}"
+            partsByStock.getOrPut(stockKey) { mutableListOf() }.add(item)
+        }
+        // Independent cuts are part of the same multi-cabinet order calculation,
+        // but remain in their own UI list and are not mixed into customParts.
+        independentParts.forEach { independent ->
+            val item = CuttingPart(independent.name, independent.widthMm, independent.lengthMm, independent.quantity, true)
+            allParts += item
+            val stockKey = "MDF|${independent.thicknessMm}"
             partsByStock.getOrPut(stockKey) { mutableListOf() }.add(item)
         }
         // Reject oversized parts before the packer can draw an invalid overflow placement.
