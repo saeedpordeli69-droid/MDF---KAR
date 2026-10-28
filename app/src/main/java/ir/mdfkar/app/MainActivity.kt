@@ -104,6 +104,15 @@ class MainActivity : Activity() {
     internal val customParts = mutableListOf<CustomOrderPart>()
     // True when the selected product family is Cabinet; other product families use registered parts.
     internal var selectedProductIsCabinet: Boolean = true
+    internal var selectedProductTypeIndex: Int = 0
+    internal lateinit var productWidthInput: EditText
+    internal lateinit var productHeightInput: EditText
+    internal lateinit var productDepthInput: EditText
+    internal lateinit var productThicknessInput: EditText
+    internal lateinit var productShelfInput: EditText
+    internal lateinit var productDoorInput: EditText
+    internal lateinit var productQuantityInput: EditText
+    internal lateinit var productIncludeBackCheck: CheckBox
     // Independent cuts are kept in their own list, separate from legacy/custom cabinet parts.
     internal val independentParts = mutableListOf<CustomOrderPart>()
     internal lateinit var orderListView: LinearLayout
@@ -157,6 +166,13 @@ class MainActivity : Activity() {
             .putString("sheetWidth", sheetWidthInput.text.toString())
             .putString("sheetHeight", sheetHeightInput.text.toString())
             .putString("kerf", kerfInput.text.toString())
+            .putString("productWidth", if (::productWidthInput.isInitialized) productWidthInput.text.toString() else "۱۲۰۰")
+            .putString("productHeight", if (::productHeightInput.isInitialized) productHeightInput.text.toString() else "۱۸۰۰")
+            .putString("productDepth", if (::productDepthInput.isInitialized) productDepthInput.text.toString() else "۵۰۰")
+            .putString("productThickness", if (::productThicknessInput.isInitialized) productThicknessInput.text.toString() else "۱۶")
+            .putString("productShelves", if (::productShelfInput.isInitialized) productShelfInput.text.toString() else "۳")
+            .putString("productDoors", if (::productDoorInput.isInitialized) productDoorInput.text.toString() else "۲")
+            .putString("productQuantity", if (::productQuantityInput.isInitialized) productQuantityInput.text.toString() else "۱")
             .putInt("cabinetType", cabinetSpinner.selectedItemPosition.coerceIn(0, 2))
             .putBoolean("includeBack", includeBackCheck.isChecked)
             .putBoolean("legs", legsCheck.isChecked)
@@ -518,6 +534,87 @@ class MainActivity : Activity() {
         return true
     }
 
+    /** Build a practical first-pass cutting list from overall dimensions for non-cabinet products. */
+    internal fun generateAutomaticProductParts(): List<CustomOrderPart>? {
+        val w = number(productWidthInput.text.toString())
+        val h = number(productHeightInput.text.toString())
+        val d = number(productDepthInput.text.toString())
+        val t = number(productThicknessInput.text.toString())
+        val shelves = number(productShelfInput.text.toString())?.toInt()
+        val doors = number(productDoorInput.text.toString())?.toInt()
+        val quantity = number(productQuantityInput.text.toString())?.toInt()
+        if (w == null || h == null || d == null || t == null || shelves == null || doors == null || quantity == null ||
+            w <= 0 || h <= 0 || d <= 0 || t <= 0 || w <= 2 * t || h <= t ||
+            shelves !in 0..30 || doors !in 0..12 || quantity !in 1..100) {
+            resultText.text = tr(
+                "ابعاد کلی، ضخامت و تعداد محصول را معتبر وارد کنید. تعداد طبقه ۰ تا ۳۰، درها ۰ تا ۱۲ و تعداد محصول ۱ تا ۱۰۰ باشد.",
+                "Enter valid overall dimensions, board thickness and product quantity. Shelves: 0–30, doors: 0–12, products: 1–100."
+            )
+            return null
+        }
+
+        val parts = mutableListOf<CustomOrderPart>()
+        fun addPart(fa: String, en: String, length: Double, width: Double, count: Int) {
+            if (count > 0 && length > 0 && width > 0) {
+                parts += CustomOrderPart(tr(fa, en), length, width, count * quantity, t)
+            }
+        }
+        fun sides() = addPart("پنل کناری", "Side panel", h, d, 2)
+        fun topBottom() = addPart("پنل بالا و پایین", "Top/bottom panel", w - 2 * t, d, 2)
+        fun shelfParts() = addPart("طبقه", "Shelf", w - 2 * t, d, shelves)
+        fun backPanel() {
+            if (productIncludeBackCheck.isChecked) addPart("پشت‌بند", "Back panel", h, w, 1)
+        }
+        fun doorParts() {
+            if (doors > 0) addPart("درب", "Door", h, w / doors, doors)
+        }
+
+        when (selectedProductTypeIndex) {
+            1 -> { // Wardrobe
+                sides(); topBottom(); shelfParts(); doorParts(); backPanel()
+            }
+            2 -> { // Bookcase / shelving
+                sides(); topBottom(); shelfParts(); backPanel()
+                addPart("تقسیم‌کننده عمودی", "Vertical divider", h - 2 * t, d, 1)
+            }
+            3 -> { // Desk / table
+                addPart("صفحه روی میز", "Tabletop", w, d, 1)
+                addPart("پایه میز", "Table leg panel", h - t, 90.0, 4)
+                addPart("تیرک طولی زیر میز", "Long apron", w - 2 * t, 100.0, 2)
+                addPart("تیرک عرضی زیر میز", "Short apron", d - 2 * t, 100.0, 2)
+            }
+            4 -> { // Shop counter
+                addPart("پنل جلوی پیشخوان", "Counter front panel", w, h, 1)
+                addPart("پنل کناری پیشخوان", "Counter side panel", h, d, 2)
+                addPart("صفحه روی پیشخوان", "Countertop", w, d, 1)
+                shelfParts(); backPanel()
+            }
+            5 -> { // Reception counter
+                addPart("نمای جلوی کانتر", "Reception front fascia", w, h, 1)
+                addPart("پنل کناری کانتر", "Reception side panel", h, d, 2)
+                addPart("صفحه کار کانتر", "Reception worktop", w, d, 1)
+                addPart("طبقه داخلی", "Inner shelf", w - 2 * t, d - t, shelves)
+            }
+            6 -> { // TV wall / decor
+                addPart("پنل اصلی دکور", "Main decor panel", w, h, 1)
+                addPart("نوار عمودی دکور", "Vertical decor strip", h, d, 2)
+                addPart("طبقه دکور", "Decor shelf", w, d, shelves)
+            }
+            7 -> { // Bathroom vanity
+                sides(); topBottom(); shelfParts(); doorParts(); backPanel()
+                addPart("صفحه روشویی", "Vanity top", w, d, 1)
+            }
+            else -> { // Custom product: generic box/cabinet-like carcass, distinct from the cabinet workflow
+                sides(); topBottom(); shelfParts(); doorParts(); backPanel()
+            }
+        }
+        if (parts.isEmpty()) {
+            resultText.text = tr("از ابعاد واردشده قطعه‌ای ساخته نشد؛ تعداد طبقه یا درها را بررسی کنید.", "No parts were generated from these dimensions; review the shelf and door counts.")
+            return null
+        }
+        return parts
+    }
+
     internal fun calculate() {
         // Cabinet orders are calculated together only while the Cabinet product family is selected.
         if (selectedProductIsCabinet && orderCabinets.isNotEmpty()) {
@@ -527,16 +624,14 @@ class MainActivity : Activity() {
         // Non-cabinet product families must use the registered parts list, not silently
         // calculate the default values in the input fields as an unregistered part.
         if (cabinetSpinner.selectedItemPosition == 0) {
-            if (!selectedProductIsCabinet && independentParts.isEmpty()) {
-                resultText.text = tr("ابتدا قطعه را با دکمهٔ «افزودن قطعه» ثبت کنید.", "Register at least one part with Add part before calculating.")
-                return
-            }
+            val generatedProductParts = if (!selectedProductIsCabinet) generateAutomaticProductParts() else emptyList()
+            if (!selectedProductIsCabinet && generatedProductParts.isNullOrEmpty()) return
             val name = customPartNameInput.text.toString().trim().ifBlank { tr("قطعه مستقل", "Independent part") }
             val length = number(customPartLengthInput.text.toString())
             val width = number(customPartWidthInput.text.toString())
             val qty = number(customPartQtyInput.text.toString())?.toInt()
             val thickness = number(customPartThicknessInput.text.toString())
-            if (length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0) {
+            if (selectedProductIsCabinet && (length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0)) {
                 resultText.text = tr("نام قطعه، طول، عرض، ضخامت و تعداد معتبر وارد کنید.", "Enter a part name, valid length, width, thickness and quantity.")
                 return
             }
@@ -548,9 +643,11 @@ class MainActivity : Activity() {
                 resultText.text = tr("ابعاد ورق و تیغه را معتبر وارد کنید.", "Enter valid sheet and saw-kerf dimensions.")
                 return
             }
-            val partsForCut = if (independentParts.isNotEmpty()) {
-                independentParts.map { CuttingPart(it.name, it.widthMm, it.lengthMm, it.quantity, true) }
-            } else listOf(CuttingPart(name, width, length, qty, true))
+            val partsForCut = when {
+                !selectedProductIsCabinet -> generatedProductParts!!.map { CuttingPart(it.name, it.widthMm, it.lengthMm, it.quantity, true) }
+                independentParts.isNotEmpty() -> independentParts.map { CuttingPart(it.name, it.widthMm, it.lengthMm, it.quantity, true) }
+                else -> listOf(CuttingPart(name, width!!, length!!, qty!!, true))
+            }
             if (partsForCut.isEmpty()) {
                 resultText.text = tr("ابتدا یک قطعه ثبت کنید.", "Add at least one part first.")
                 return
@@ -568,7 +665,13 @@ class MainActivity : Activity() {
             val pieceCount = partsForCut.sumOf { it.quantity }
             metricPieces.text = if (english) pieceCount.toString() else faDigits(pieceCount.toString())
             val details = partsForCut.joinToString("\n") { "${it.name}: ${fmt(it.height)} × ${fmt(it.width)} mm × ${it.quantity}" }
-            resultText.text = if (english) "Independent parts:\n$details\nDimensions used without automatic adjustment." else "قطعات مستقل ثبت‌شده:\n${faDigits(details)}\nابعاد بدون تغییر خودکار استفاده شدند."
+            resultText.text = if (!selectedProductIsCabinet) {
+                if (english) "Automatically generated product parts:\n$details\nReview the suggested parts before production; dimensions are based on the overall measurements you entered."
+                else "قطعات تولیدشدهٔ خودکار محصول:\n${faDigits(details)}\nپیش از ساخت، فهرست قطعات را بررسی کنید؛ ابعاد بر اساس اندازه‌های کلی واردشده ساخته شده‌اند."
+            } else {
+                if (english) "Independent parts:\n$details\nDimensions used without automatic adjustment."
+                else "قطعات مستقل ثبت‌شده:\n${faDigits(details)}\nابعاد بدون تغییر خودکار استفاده شدند."
+            }
             partsList.removeAllViews()
             partsList.addView(TextView(this).apply { text = resultText.text; setTextColor(ink); textSize = 14f; setPadding(dp(8), dp(8), dp(8), dp(8)) })
             return
