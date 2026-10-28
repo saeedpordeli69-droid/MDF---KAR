@@ -531,7 +531,7 @@ internal fun MainActivity.buildScreen() {
         addTo(partsCard, resultText, 1)
         val pricingCard = addSection(resultsPage, "برآورد قیمت سفارش", "Order price estimate", "قیمت‌ها را به تومان وارد کنید؛ هزینه ورق بر اساس تعداد ورق کامل محاسبه می‌شود.", "Enter prices in toman; board cost is based on complete sheet count.")
         fun priceInput(hintFa: String, hintEn: String): EditText = EditText(this).apply {
-            hint = tr(hintFa, hintEn)
+            this.hint = tr(hintFa, hintEn)
             inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
             setSingleLine(true)
             textSize = 14f
