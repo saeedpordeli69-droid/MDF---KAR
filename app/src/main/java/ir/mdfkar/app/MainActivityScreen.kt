@@ -348,9 +348,8 @@ internal fun MainActivity.buildScreen() {
                 Toast.makeText(this, tr("${spec.name} به سفارش اضافه شد.", "${spec.name} added to order."), Toast.LENGTH_SHORT).show()
             }
         }, 8)
-        addTo(cabinetCard, button("پاک کردن سفارش چند کابینتی", "Clear multi-cabinet order") {
-            orderCabinets.clear(); refreshOrderList()
-            Toast.makeText(this, tr("سفارش پاک شد؛ محاسبه دوباره از مشخصات فعلی انجام می‌شود.", "Order cleared; calculation will use current dimensions."), Toast.LENGTH_SHORT).show()
+        addTo(cabinetCard, button("پاک کردن کل سفارش", "Clear entire order") {
+            clearRegisteredOrder()
         }, 8)
 
         customPartsToggleButton = button("＋ قطعات سفارشی (۰)", "+ Custom parts (0)") {
@@ -525,6 +524,23 @@ internal fun MainActivity.buildScreen() {
             setPadding(dp(2), dp(6), dp(2), dp(4))
         }, 3)
         productDetailsCard.addView(productPreviewView, LinearLayout.LayoutParams(-1, dp(245)).apply { bottomMargin = dp(10) })
+
+        val productOrderCard = addSection(
+            productDetailsCard,
+            "فهرست مشترک سفارش",
+            "Shared order list",
+            "محصول را ثبت کنید؛ سپس می‌توانید محصول بعدی یا کابینت دیگری را هم به همین سفارش اضافه کنید.",
+            "Register this product, then add another product or cabinet to the same order."
+        )
+        productOrderListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        addTo(productOrderCard, productOrderListView, 5)
+        addTo(productOrderCard, button("＋ افزودن این محصول به سفارش", "+ Add this product to order") {
+            addCurrentProductToOrder()
+        }, 6)
+        addTo(productOrderCard, button("پاک کردن کل سفارش", "Clear entire order") {
+            clearRegisteredOrder()
+        }, 3)
+        refreshProductOrderList()
 
         fun updateProductPreview() {
             val w = number(productWidthInput.text.toString()) ?: 1200.0
