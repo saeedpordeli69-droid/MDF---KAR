@@ -91,6 +91,15 @@ class MainActivity : Activity() {
     internal var latestSheetH = 2070.0
     internal var latestSheetCount = 0
     internal var selectedSheetIndex = 0
+    internal var latestPvcMeters = 0.0
+    internal lateinit var boardPriceInput: EditText
+    internal lateinit var edgePriceInput: EditText
+    internal lateinit var hardwareCostInput: EditText
+    internal lateinit var laborCostInput: EditText
+    internal lateinit var transportCostInput: EditText
+    internal lateinit var otherCostInput: EditText
+    internal lateinit var profitPercentInput: EditText
+    internal lateinit var priceEstimateText: TextView
     internal val orderCabinets = mutableListOf<CabinetSpec>()
     internal val customParts = mutableListOf<CustomOrderPart>()
     // Independent cuts are kept in their own list, separate from legacy/custom cabinet parts.
@@ -152,6 +161,13 @@ class MainActivity : Activity() {
             .putBoolean("doorPvc", doorPvcCheck.isChecked)
             .putBoolean("sidePvc", sidePvcCheck.isChecked)
             .putBoolean("shelfPvc", shelfPvcCheck.isChecked)
+            .putString("priceBoardSheet", if (::boardPriceInput.isInitialized) boardPriceInput.text.toString() else "0")
+            .putString("priceEdgeMeter", if (::edgePriceInput.isInitialized) edgePriceInput.text.toString() else "0")
+            .putString("priceHardware", if (::hardwareCostInput.isInitialized) hardwareCostInput.text.toString() else "0")
+            .putString("priceLabor", if (::laborCostInput.isInitialized) laborCostInput.text.toString() else "0")
+            .putString("priceTransport", if (::transportCostInput.isInitialized) transportCostInput.text.toString() else "0")
+            .putString("priceOther", if (::otherCostInput.isInitialized) otherCostInput.text.toString() else "0")
+            .putString("priceProfit", if (::profitPercentInput.isInitialized) profitPercentInput.text.toString() else "0")
             .apply()
     }
 
@@ -938,6 +954,7 @@ class MainActivity : Activity() {
             sheetOffset += plan.sheetCount
         }
         latestPlacements = placements
+        latestPvcMeters = pvcMeters
         latestSheetW = sw; latestSheetH = sh; latestSheetCount = sheetOffset; selectedSheetIndex = 0
         updateSheetNavigation(); layoutView.invalidate()
         val boardArea = allParts.sumOf { it.width * it.height * it.quantity }
@@ -957,6 +974,38 @@ class MainActivity : Activity() {
         }
         val cabinetSummary = orderCabinets.joinToString("\n") { c -> "${c.name}: ${fmt(c.widthMm)}×${fmt(c.heightMm)}×${fmt(c.depthMm)} mm, ${tr("تعداد", "qty")} ${c.quantity}, ${tr("ضخامت", "thickness")} ${fmt(c.boardThicknessMm)} mm" }
         resultText.text = if (english) "Multi-cabinet order\n$cabinetSummary\nSheets: $latestSheetCount\nEstimated area-based waste: ${fmt(waste)}%\nSeparate back panels: ${fmt(backArea)} m²\nEstimated PVC: ${fmt(pvcMeters)} m\n\nWarning: planning-level row packing; verify all dimensions and grain direction before cutting." else "سفارش چند کابینتی\n$cabinetSummary\nتعداد ورق: ${faDigits(latestSheetCount.toString())}\nدورریز تخمینی بر اساس مساحت: ${faDigits(fmt(waste))}٪\nپشت‌بند جداگانه: ${faDigits(fmt(backArea))} مترمربع\nPVC تخمینی: ${faDigits(fmt(pvcMeters))} متر\n\nهشدار: چیدمان تخمینی است؛ پیش از برش، ابعاد و جهت رگه را بررسی کنید."
+        updatePriceEstimate()
+    }
+
+    internal fun updatePriceEstimate() {
+        if (!::priceEstimateText.isInitialized) return
+        fun rate(field: EditText): Double = number(field.text.toString())?.coerceAtLeast(0.0) ?: 0.0
+        val rates = PricingRates(
+            boardPricePerSheet = rate(boardPriceInput),
+            edgePricePerMeter = rate(edgePriceInput),
+            hardwareCost = rate(hardwareCostInput),
+            laborCost = rate(laborCostInput),
+            transportCost = rate(transportCostInput),
+            otherCost = rate(otherCostInput),
+            profitPercent = rate(profitPercentInput)
+        )
+        val estimate = rates.estimate(latestSheetCount, latestPvcMeters)
+        fun money(value: Double): String = (if (english) fmt(value) else faDigits(fmt(value))) + if (english) " toman" else " تومان"
+        priceEstimateText.text = if (english) {
+            "Sheets: ${latestSheetCount} × ${money(rate(boardPriceInput))} = ${money(estimate.board)}\n" +
+                "Edge banding: ${fmt(latestPvcMeters)} m = ${money(estimate.edging)}\n" +
+                "Hardware: ${money(estimate.hardware)}\nLabor: ${money(estimate.labor)}\n" +
+                "Transport: ${money(estimate.transport)}\nOther: ${money(estimate.other)}\n" +
+                "Subtotal: ${money(estimate.subtotal)}\nProfit (${fmt(rate(profitPercentInput))}%): ${money(estimate.profit)}\n" +
+                "FINAL ORDER PRICE: ${money(estimate.total)}"
+        } else {
+            "ورق MDF (${faDigits(latestSheetCount.toString())} × ${money(rate(boardPriceInput))}): ${money(estimate.board)}\n" +
+                "نوار لبه (${faDigits(fmt(latestPvcMeters))} متر): ${money(estimate.edging)}\n" +
+                "یراق‌آلات: ${money(estimate.hardware)}\nدستمزد: ${money(estimate.labor)}\n" +
+                "حمل‌ونقل: ${money(estimate.transport)}\nمتفرقه: ${money(estimate.other)}\n" +
+                "جمع هزینه‌ها: ${money(estimate.subtotal)}\nسود (${faDigits(fmt(rate(profitPercentInput)))}٪): ${money(estimate.profit)}\n" +
+                "قیمت نهایی سفارش: ${money(estimate.total)}"
+        }
     }
 
     internal fun updateSheetNavigation() {
