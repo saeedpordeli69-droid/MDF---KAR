@@ -716,9 +716,9 @@ class MainActivity : Activity() {
                 if (orderCabinets.isEmpty()) listOf(tr("ابتدا کابینت اضافه کنید", "Add a cabinet first")) else orderCabinets.map { it.name })
         }
         orderListView.removeAllViews()
-        if (orderCabinets.isEmpty()) {
+        if (orderCabinets.isEmpty() && independentParts.isEmpty()) {
             orderListView.addView(TextView(this).apply {
-                text = tr("هنوز کابینتی به سفارش اضافه نشده است.", "No cabinets have been added yet.")
+                text = tr("هنوز موردی به سفارش اضافه نشده است.", "No items have been added to the order yet.")
                 textSize = 11f; setTextColor(muted); setPadding(dp(8), dp(5), dp(8), dp(5))
             })
             return
@@ -732,12 +732,28 @@ class MainActivity : Activity() {
             }
             val info = TextView(this).apply {
                 text = "${c.name}  •  ${fmt(c.widthMm)}×${fmt(c.heightMm)}×${fmt(c.depthMm)} mm  •  ${tr("ضخامت", "thickness")} ${fmt(c.boardThicknessMm)}  •  ${tr("تعداد", "qty")} ${c.quantity}"
-                textSize = 11f; setTextColor(ink)
-                layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                textSize = 11f; setTextColor(ink); layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
             }
             row.addView(info)
             row.addView(button("×", "×") {
                 orderCabinets.removeAt(index); refreshOrderList()
+            }.apply { minWidth = dp(40); minHeight = dp(38) })
+            orderListView.addView(row)
+        }
+        independentParts.forEachIndexed { index, part ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(9), dp(7), dp(9), dp(7))
+                background = rounded(Color.rgb(22, 48, 63), 10, Color.rgb(45, 125, 145), 1)
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) }
+            }
+            val info = TextView(this).apply {
+                text = "${part.name} • ${fmt(part.lengthMm)}×${fmt(part.widthMm)} mm • ${tr("تعداد", "qty")} ${part.quantity} • ${fmt(part.thicknessMm)} mm"
+                textSize = 10f; setTextColor(ink); layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            }
+            row.addView(info)
+            row.addView(button("×", "×") {
+                independentParts.removeAt(index); refreshOrderList()
             }.apply { minWidth = dp(40); minHeight = dp(38) })
             orderListView.addView(row)
         }
