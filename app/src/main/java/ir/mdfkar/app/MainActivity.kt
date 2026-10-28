@@ -716,7 +716,7 @@ class MainActivity : Activity() {
                 if (orderCabinets.isEmpty()) listOf(tr("ابتدا کابینت اضافه کنید", "Add a cabinet first")) else orderCabinets.map { it.name })
         }
         orderListView.removeAllViews()
-        if (orderCabinets.isEmpty() && customParts.isEmpty() && independentParts.isEmpty()) {
+        if (orderCabinets.isEmpty() && independentParts.isEmpty()) {
             orderListView.addView(TextView(this).apply {
                 text = tr("هنوز موردی به سفارش اضافه نشده است.", "No items have been added to the order yet.")
                 textSize = 11f; setTextColor(muted); setPadding(dp(8), dp(5), dp(8), dp(5))
@@ -737,25 +737,6 @@ class MainActivity : Activity() {
             row.addView(info)
             row.addView(button("×", "×") {
                 orderCabinets.removeAt(index); refreshOrderList()
-            }.apply { minWidth = dp(40); minHeight = dp(38) })
-            orderListView.addView(row)
-        }
-        // Custom pieces are also shown in the same unified order list.
-        customParts.forEachIndexed { index, part ->
-            val linkedName = part.linkedCabinetId?.let { id -> orderCabinets.find { it.id == id }?.name }
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(9), dp(7), dp(9), dp(7))
-                background = rounded(Color.rgb(22, 48, 63), 10, Color.rgb(45, 125, 145), 1)
-                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) }
-            }
-            val info = TextView(this).apply {
-                text = "${part.name} • ${fmt(part.lengthMm)}×${fmt(part.widthMm)} mm • ${tr("تعداد", "qty")} ${part.quantity} • ${fmt(part.thicknessMm)} mm${if (linkedName != null) " • $linkedName" else " • ${tr("سفارشی", "Custom")}"}"
-                textSize = 10f; setTextColor(ink); layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-            }
-            row.addView(info)
-            row.addView(button("×", "×") {
-                customParts.removeAt(index); refreshCustomPartsList(); refreshOrderList()
             }.apply { minWidth = dp(40); minHeight = dp(38) })
             orderListView.addView(row)
         }
@@ -916,15 +897,45 @@ class MainActivity : Activity() {
         val allStockParts = partsByStock.values.flatten()
         if (rejectPartsThatDoNotFit(allStockParts, sw, sh)) return
 
-        // Each material/thickness group is laid out separately.
+        // Bridge the existing UI order into the shared typed order model before cutting.
+        // This keeps cabinets, custom parts and independent parts in one common calculation.
+        val modelLines = partsByStock.entries.mapNotNull { (stockKey, cuttingParts) ->
+            val keyParts = stockKey.split("|")
+            val stockType = keyParts.firstOrNull().orEmpty().ifBlank { "MDF" }
+            val thickness = keyParts.getOrNull(1)?.toDoubleOrNull() ?: 16.0
+            val modelParts = cuttingParts.filter { it.quantity > 0 && it.width > 0.0 && it.height > 0.0 }
+                .map { part ->
+                    ProductPart(
+                        name = part.name,
+                        lengthMm = part.height,
+                        widthMm = part.width,
+                        quantity = part.quantity,
+                        thicknessMm = thickness,
+                        stockType = stockType,
+                        grainSensitive = !part.rotate
+                    )
+                }
+            if (modelParts.isEmpty()) null else ProductOrderLine(
+                kind = ProductKind.CUSTOM,
+                name = "$stockType $thickness mm",
+                parts = modelParts
+            )
+        }
+        val sharedOrder = MixedProductOrder(
+            name = if (english) "Current mixed order" else "سفارش مشترک فعلی",
+            lines = modelLines
+        )
+        if (modelLines.isNotEmpty() && !sharedOrder.isValid()) {
+            resultText.text = tr("یکی از قطعات سفارش اطلاعات نامعتبر دارد.", "One or more order parts are invalid.")
+            return
+        }
+
+        // The shared order model now owns material/thickness grouping and calls the existing cutter.
         val placements = mutableListOf<SheetPlacement>()
         var sheetOffset = 0
-        partsByStock.values.forEach { parts ->
-            if (parts.isNotEmpty()) {
-                val packed = CuttingCalculator.packParts(parts, sw, sh, kerf)
-                placements += packed.placements.map { it.copy(sheet = it.sheet + sheetOffset) }
-                sheetOffset += packed.sheetCount
-            }
+        sharedOrder.createCuttingPlan(sw, sh, kerf).forEach { plan ->
+            placements += plan.placements.map { it.copy(sheet = it.sheet + sheetOffset) }
+            sheetOffset += plan.sheetCount
         }
         latestPlacements = placements
         latestSheetW = sw; latestSheetH = sh; latestSheetCount = sheetOffset; selectedSheetIndex = 0
