@@ -529,6 +529,60 @@ internal fun MainActivity.buildScreen() {
             background = rounded(Color.rgb(5, 22, 39), 13, Color.rgb(25, 79, 124), 1)
         }
         addTo(partsCard, resultText, 1)
+        val pricingCard = addSection(resultsPage, "برآورد قیمت سفارش", "Order price estimate", "قیمت‌ها را به تومان وارد کنید؛ هزینه ورق بر اساس تعداد ورق کامل محاسبه می‌شود.", "Enter prices in toman; board cost is based on complete sheet count.")
+        fun priceInput(hintFa: String, hintEn: String): EditText = EditText(this).apply {
+            hint = tr(hintFa, hintEn)
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setSingleLine(true)
+            textSize = 14f
+            setTextColor(ink)
+            setHintTextColor(muted)
+            background = rounded(Color.rgb(10, 31, 53), 12, Color.rgb(43, 102, 153), 1)
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+        }
+        boardPriceInput = priceInput("قیمت هر ورق کامل MDF (تومان)", "Price per full MDF sheet (toman)")
+        edgePriceInput = priceInput("قیمت هر متر نوار لبه (تومان)", "Price per metre of edge banding (toman)")
+        hardwareCostInput = priceInput("هزینه کل یراق‌آلات (تومان)", "Total hardware cost (toman)")
+        laborCostInput = priceInput("دستمزد ساخت و نصب (تومان)", "Fabrication and installation labor (toman)")
+        transportCostInput = priceInput("هزینه حمل‌ونقل (تومان)", "Transport cost (toman)")
+        otherCostInput = priceInput("هزینه‌های متفرقه (تومان)", "Other costs (toman)")
+        profitPercentInput = priceInput("درصد سود (%)", "Profit percentage (%)")
+        listOf(
+            boardPriceInput to ("قیمت هر ورق کامل MDF (تومان)" to "Price per full MDF sheet (toman)"),
+            edgePriceInput to ("قیمت هر متر نوار لبه (تومان)" to "Price per metre of edge banding (toman)"),
+            hardwareCostInput to ("هزینه کل یراق‌آلات (تومان)" to "Total hardware cost (toman)"),
+            laborCostInput to ("دستمزد ساخت و نصب (تومان)" to "Fabrication and installation labor (toman)"),
+            transportCostInput to ("هزینه حمل‌ونقل (تومان)" to "Transport cost (toman)"),
+            otherCostInput to ("هزینه‌های متفرقه (تومان)" to "Other costs (toman)"),
+            profitPercentInput to ("درصد سود (%)" to "Profit percentage (%)")
+        ).forEach { (field, labels) ->
+            addTo(pricingCard, label(labels.first, labels.second, 12f), 3)
+            addTo(pricingCard, field, 7)
+        }
+        priceEstimateText = TextView(this).apply {
+            text = tr("پس از انجام محاسبه، تعداد ورق و مقدار نوار لبه در برآورد قیمت استفاده می‌شود.", "Calculate the order first to use sheet count and edge banding length in the estimate.")
+            textSize = 13f
+            setTextColor(ink)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = rounded(Color.rgb(5, 22, 39), 13, Color.rgb(25, 79, 124), 1)
+        }
+        addTo(pricingCard, priceEstimateText, 8)
+        addTo(pricingCard, button("محاسبهٔ دوبارهٔ قیمت", "Recalculate price") { updatePriceEstimate() }, 2)
+        val pricePrefs = prefs()
+        listOf(
+            boardPriceInput to "priceBoardSheet",
+            edgePriceInput to "priceEdgeMeter",
+            hardwareCostInput to "priceHardware",
+            laborCostInput to "priceLabor",
+            transportCostInput to "priceTransport",
+            otherCostInput to "priceOther",
+            profitPercentInput to "priceProfit"
+        ).forEach { (field, key) ->
+            field.setText(pricePrefs.getString(key, "0") ?: "0")
+            field.setOnFocusChangeListener { _, hasFocus ->
+                if (!hasFocus) { updatePriceEstimate(); saveSettings() }
+            }
+        }
         addTo(resultsPage, button("ذخیره این پروژه", "Save this project") { saveProjectDialog() }, 8)
 
         // PROJECTS page is a dedicated destination, not a section far down the form.
