@@ -101,6 +101,7 @@ class MainActivity : Activity() {
     internal lateinit var profitPercentInput: EditText
     internal lateinit var priceEstimateText: TextView
     internal val orderCabinets = mutableListOf<CabinetSpec>()
+    internal val orderProductLines = mutableListOf<ProductOrderLine>()
     internal val customParts = mutableListOf<CustomOrderPart>()
     // True when the selected product family is Cabinet; other product families use registered parts.
     internal var selectedProductIsCabinet: Boolean = true
@@ -122,6 +123,7 @@ class MainActivity : Activity() {
     // Independent cuts are kept in their own list, separate from legacy/custom cabinet parts.
     internal val independentParts = mutableListOf<CustomOrderPart>()
     internal lateinit var orderListView: LinearLayout
+    internal lateinit var productOrderListView: LinearLayout
     internal lateinit var customPartsListView: LinearLayout
     internal lateinit var customPartsSection: LinearLayout
     internal lateinit var customPartsToggleButton: TextView
@@ -656,9 +658,81 @@ class MainActivity : Activity() {
         return parts
     }
 
+    /** Convert the selected product's generated parts into the shared typed order model. */
+    internal fun productOrderLineFromParts(parts: List<CustomOrderPart>): ProductOrderLine {
+        val kind = when (selectedProductTypeIndex) {
+            1 -> ProductKind.WARDROBE
+            2 -> ProductKind.BOOKCASE
+            3 -> ProductKind.DESK
+            4 -> ProductKind.SHOP_COUNTER
+            5 -> ProductKind.RECEPTION_COUNTER
+            6 -> ProductKind.TV_UNIT
+            7 -> ProductKind.VANITY
+            else -> ProductKind.CUSTOM
+        }
+        val modelParts = parts.map { part ->
+            val n = part.name.lowercase(Locale.ROOT)
+            val isDoorOrDrawerFront = listOf("درب", "نمای کشو", "door", "drawer front").any { n.contains(it) }
+            val isBackOrInternalDrawer = listOf("پشت", "کف کشو", "بغل کشو", "drawer back", "drawer bottom", "drawer side", "back panel").any { n.contains(it) }
+            val isSide = !isBackOrInternalDrawer && listOf("بغل", "پهلو", "side panel", "bookcase side", "counter side").any { n.contains(it) }
+            val isFrontShelfOrTop = !isBackOrInternalDrawer && listOf("طبقه", "صفحه", "بالا و پایین", "بالا و کف", "کف بخش", "shelf", "tabletop", "counter top", "worktop", "top and bottom", "top/bottom", "bottom panel").any { n.contains(it) }
+            val doorPvc = isDoorOrDrawerFront && doorPvcCheck.isChecked
+            val frontPvc = !isDoorOrDrawerFront && ((isSide && sidePvcCheck.isChecked) || (isFrontShelfOrTop && shelfPvcCheck.isChecked))
+            ProductPart(
+                name = part.name,
+                lengthMm = part.lengthMm,
+                widthMm = part.widthMm,
+                quantity = part.quantity,
+                thicknessMm = part.thicknessMm,
+                stockType = "MDF",
+                grainSensitive = false,
+                edgeTop = doorPvc || frontPvc,
+                edgeBottom = doorPvc,
+                edgeLeft = doorPvc,
+                edgeRight = doorPvc
+            )
+        }
+        return ProductOrderLine(
+            kind = kind,
+            name = tr(kind.titleFa, kind.titleEn),
+            parts = modelParts,
+            quantity = 1
+        )
+    }
+
+    internal fun buildCurrentProductOrderLine(): ProductOrderLine? {
+        if (selectedProductIsCabinet) return null
+        val parts = generateAutomaticProductParts() ?: return null
+        val line = productOrderLineFromParts(parts)
+        if (!line.isValid()) {
+            resultText.text = tr("قطعات محصول معتبر نیستند؛ ابعاد را بررسی کنید.", "Generated product parts are invalid; review the dimensions.")
+            return null
+        }
+        return line
+    }
+
+    internal fun addCurrentProductToOrder() {
+        val line = buildCurrentProductOrderLine() ?: return
+        orderProductLines += line
+        refreshOrderList()
+        Toast.makeText(this, tr("${line.name} به سفارش اضافه شد.", "${line.name} added to the order."), Toast.LENGTH_SHORT).show()
+    }
+
+    internal fun clearRegisteredOrder() {
+        orderCabinets.clear()
+        orderProductLines.clear()
+        customParts.clear()
+        independentParts.clear()
+        refreshOrderList()
+        refreshCustomPartsList()
+        refreshIndependentPartsList()
+        Toast.makeText(this, tr("همه موارد سفارش پاک شدند.", "All order items were cleared."), Toast.LENGTH_SHORT).show()
+    }
+
     internal fun calculate() {
-        // Cabinet orders are calculated together only while the Cabinet product family is selected.
-        if (selectedProductIsCabinet && orderCabinets.isNotEmpty()) {
+        // Any explicitly registered item is calculated as one mixed order, regardless of
+        // which product form is currently visible.
+        if (orderCabinets.isNotEmpty() || orderProductLines.isNotEmpty() || customParts.isNotEmpty() || independentParts.isNotEmpty()) {
             calculateMultiCabinetOrder()
             return
         }
@@ -694,6 +768,53 @@ class MainActivity : Activity() {
                 return
             }
             if (rejectPartsThatDoNotFit(partsForCut, sw, sh)) return
+            if (!selectedProductIsCabinet) {
+                val currentLine = productOrderLineFromParts(generatedProductParts!!)
+                val currentOrder = MixedProductOrder(currentLine.name, listOf(currentLine))
+                if (!currentOrder.isValid()) {
+                    resultText.text = tr("قطعات محصول معتبر نیستند؛ ابعاد را بررسی کنید.", "Generated product parts are invalid; review the dimensions.")
+                    return
+                }
+                val placements = mutableListOf<SheetPlacement>()
+                var sheetOffset = 0
+                val plans = currentOrder.createCuttingPlan(sw, sh, kerf)
+                plans.forEach { plan ->
+                    placements += plan.placements.map { it.copy(sheet = it.sheet + sheetOffset) }
+                    sheetOffset += plan.sheetCount
+                }
+                latestPlacements = placements
+                latestPvcMeters = currentOrder.totalEdgeMeters()
+                latestSheetW = sw; latestSheetH = sh; latestSheetCount = sheetOffset; selectedSheetIndex = 0
+                updateSheetNavigation(); layoutView.invalidate()
+                val area = currentOrder.sheetAreaSquareMeters() * 1_000_000.0
+                val totalArea = latestSheetCount * sw * sh
+                val waste = if (totalArea > 0) max(0.0, (totalArea - area) / totalArea * 100.0) else 0.0
+                metricSheets.text = if (english) latestSheetCount.toString() else faDigits(latestSheetCount.toString())
+                metricWaste.text = if (english) "${fmt(waste)}%" else faDigits("${fmt(waste)}٪")
+                val pieceCount = currentOrder.allParts().sumOf { it.quantity }
+                metricPieces.text = if (english) pieceCount.toString() else faDigits(pieceCount.toString())
+                val details = currentOrder.allParts().joinToString("\n") { "${it.name}: ${fmt(it.lengthMm)} × ${fmt(it.widthMm)} mm × ${it.quantity}" }
+                resultText.text = if (english) {
+                    "${currentLine.name} — generated parts:\n$details\nSheets: $latestSheetCount\nEstimated area-based waste: ${fmt(waste)}%\nEstimated edge banding: ${fmt(latestPvcMeters)} m\n\nReview all dimensions before production."
+                } else {
+                    "${currentLine.name} — قطعات تولیدشده:\n${faDigits(details)}\nتعداد ورق: ${faDigits(latestSheetCount.toString())}\nدورریز تخمینی بر اساس مساحت: ${faDigits(fmt(waste))}٪\nنوار لبه تخمینی: ${faDigits(fmt(latestPvcMeters))} متر\n\nپیش از ساخت، ابعاد قطعات را بررسی کنید."
+                }
+                partsList.removeAllViews()
+                currentOrder.allParts().forEachIndexed { index, part ->
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(7), dp(8), dp(7), dp(8))
+                        if (index % 2 == 0) setBackgroundColor(Color.rgb(8, 30, 51))
+                    }
+                    row.addView(View(this).apply { background = rounded(partColor(part.name), 5); layoutParams = LinearLayout.LayoutParams(dp(12), dp(28)).apply { marginEnd = dp(8) } })
+                    row.addView(TextView(this).apply { text = part.name; textSize = 11f; setTextColor(ink); layoutParams = LinearLayout.LayoutParams(0, -2, 1.4f) })
+                    row.addView(TextView(this).apply { text = "${faDigits(fmt(part.lengthMm))} × ${faDigits(fmt(part.widthMm))}"; textSize = 10f; setTextColor(AppTheme.TEXT_SECONDARY); gravity = Gravity.CENTER; layoutParams = LinearLayout.LayoutParams(0, -2, 1.1f) })
+                    row.addView(TextView(this).apply { text = faDigits(part.quantity.toString()); textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; layoutParams = LinearLayout.LayoutParams(dp(30), -2) })
+                    partsList.addView(row)
+                }
+                if (::priceEstimateText.isInitialized) updatePriceEstimate()
+                return
+            }
             val packed = CuttingCalculator.packParts(partsForCut, sw, sh, kerf)
             latestPlacements = packed.placements
             latestSheetW = sw; latestSheetH = sh; latestSheetCount = packed.sheetCount; selectedSheetIndex = 0
@@ -881,11 +1002,12 @@ class MainActivity : Activity() {
                 if (orderCabinets.isEmpty()) listOf(tr("ابتدا کابینت اضافه کنید", "Add a cabinet first")) else orderCabinets.map { it.name })
         }
         orderListView.removeAllViews()
-        if (orderCabinets.isEmpty() && independentParts.isEmpty()) {
+        if (orderCabinets.isEmpty() && orderProductLines.isEmpty() && customParts.isEmpty() && independentParts.isEmpty()) {
             orderListView.addView(TextView(this).apply {
                 text = tr("هنوز موردی به سفارش اضافه نشده است.", "No items have been added to the order yet.")
                 textSize = 11f; setTextColor(muted); setPadding(dp(8), dp(5), dp(8), dp(5))
             })
+            refreshProductOrderList()
             return
         }
         orderCabinets.forEachIndexed { index, c ->
@@ -905,6 +1027,37 @@ class MainActivity : Activity() {
             }.apply { minWidth = dp(40); minHeight = dp(38) })
             orderListView.addView(row)
         }
+        orderProductLines.forEachIndexed { index, line ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(9), dp(7), dp(9), dp(7))
+                background = rounded(Color.rgb(12, 43, 70), 10, Color.rgb(55, 132, 196), 1)
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) }
+            }
+            val info = TextView(this).apply {
+                val qty = line.parts.sumOf { it.quantity } * line.quantity
+                text = "${line.name} • ${line.parts.size} ${tr("نوع قطعه", "part types")} • ${tr("تعداد", "qty")} $qty"
+                textSize = 10f; setTextColor(ink); layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            }
+            row.addView(info)
+            row.addView(button("×", "×") { orderProductLines.removeAt(index); refreshOrderList() }.apply { minWidth = dp(40); minHeight = dp(38) })
+            orderListView.addView(row)
+        }
+        customParts.forEachIndexed { index, part ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(9), dp(7), dp(9), dp(7))
+                background = rounded(Color.rgb(29, 42, 57), 10, Color.rgb(95, 117, 145), 1)
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) }
+            }
+            val info = TextView(this).apply {
+                text = "${part.name} • ${fmt(part.lengthMm)}×${fmt(part.widthMm)} mm • ${tr("تعداد", "qty")} ${part.quantity}"
+                textSize = 10f; setTextColor(ink); layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            }
+            row.addView(info)
+            row.addView(button("×", "×") { customParts.removeAt(index); refreshOrderList(); refreshCustomPartsList() }.apply { minWidth = dp(40); minHeight = dp(38) })
+            orderListView.addView(row)
+        }
         independentParts.forEachIndexed { index, part ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
@@ -918,10 +1071,41 @@ class MainActivity : Activity() {
             }
             row.addView(info)
             row.addView(button("×", "×") {
-                independentParts.removeAt(index); refreshOrderList()
+                independentParts.removeAt(index); refreshOrderList(); refreshIndependentPartsList()
             }.apply { minWidth = dp(40); minHeight = dp(38) })
             orderListView.addView(row)
         }
+        refreshProductOrderList()
+    }
+
+    internal fun refreshProductOrderList() {
+        if (!::productOrderListView.isInitialized) return
+        productOrderListView.removeAllViews()
+        if (orderCabinets.isEmpty() && orderProductLines.isEmpty() && customParts.isEmpty() && independentParts.isEmpty()) {
+            productOrderListView.addView(TextView(this).apply {
+                text = tr("سفارش هنوز خالی است؛ محصول را اضافه کنید.", "The order is empty; add a product to begin.")
+                textSize = 11f; setTextColor(muted); setPadding(dp(8), dp(5), dp(8), dp(5))
+            })
+            return
+        }
+        fun addOrderRow(title: String, subtitle: String, remove: () -> Unit) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(9), dp(7), dp(9), dp(7))
+                background = rounded(Color.rgb(10, 39, 65), 10, Color.rgb(35, 100, 150), 1)
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) }
+            }
+            row.addView(TextView(this).apply {
+                text = "$title\n$subtitle"; textSize = 10f; setTextColor(ink)
+                layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+            })
+            row.addView(button("×", "×", remove).apply { minWidth = dp(40); minHeight = dp(38) })
+            productOrderListView.addView(row)
+        }
+        orderCabinets.forEachIndexed { index, c -> addOrderRow(c.name, "${fmt(c.widthMm)}×${fmt(c.heightMm)}×${fmt(c.depthMm)} mm • ${tr("تعداد", "qty")} ${c.quantity}") { orderCabinets.removeAt(index); refreshOrderList() } }
+        orderProductLines.forEachIndexed { index, line -> addOrderRow(line.name, "${line.parts.size} ${tr("نوع قطعه", "part types")} • ${tr("تعداد قطعه", "pieces")} ${line.parts.sumOf { it.quantity } * line.quantity}") { orderProductLines.removeAt(index); refreshOrderList() } }
+        customParts.forEachIndexed { index, part -> addOrderRow(part.name, "${fmt(part.lengthMm)}×${fmt(part.widthMm)} mm • ${tr("تعداد", "qty")} ${part.quantity}") { customParts.removeAt(index); refreshOrderList(); refreshCustomPartsList() } }
+        independentParts.forEachIndexed { index, part -> addOrderRow(part.name, "${fmt(part.lengthMm)}×${fmt(part.widthMm)} mm • ${tr("تعداد", "qty")} ${part.quantity}") { independentParts.removeAt(index); refreshOrderList(); refreshIndependentPartsList() } }
     }
 
     internal fun refreshCustomPartsList() {
@@ -996,7 +1180,7 @@ class MainActivity : Activity() {
         val sw = number(sheetWidthInput.text.toString())
         val sh = number(sheetHeightInput.text.toString())
         val kerf = number(kerfInput.text.toString())
-        if (sw == null || sh == null || kerf == null || sw <= 0 || sh <= 0 || kerf < 0 || orderCabinets.any { !it.isValid() }) {
+        if (sw == null || sh == null || kerf == null || sw <= 0 || sh <= 0 || kerf < 0 || orderCabinets.any { !it.isValid() } || orderProductLines.any { !it.isValid() }) {
             resultText.text = tr("ابعاد ورق یا اطلاعات سفارش معتبر نیست.", "Sheet dimensions or order details are invalid.")
             return
         }
@@ -1035,6 +1219,18 @@ class MainActivity : Activity() {
             }
             if (sidePvcCheck.isChecked) pvcMeters += c.quantity * 2 * bodyH / 1000.0
             if (shelfPvcCheck.isChecked) pvcMeters += c.quantity * (1 + c.shelfCount) * innerW / 1000.0
+        }
+        // Product-specific generated parts join the same order and cutting calculation as cabinets.
+        orderProductLines.forEach { line ->
+            line.expandedParts().forEach { part ->
+                val item = CuttingPart(
+                    "${line.name} - ${part.name}", part.widthMm, part.lengthMm, part.quantity, !part.grainSensitive
+                )
+                allParts += item
+                val stockKey = "${part.stockType}|${part.thicknessMm}"
+                partsByStock.getOrPut(stockKey) { mutableListOf() }.add(item)
+            }
+            pvcMeters += line.parts.sumOf { it.edgeMeters() } * line.quantity
         }
         // Add standalone or cabinet-linked custom parts to the matching stock/thickness group.
         customParts.forEach { custom ->
@@ -1122,7 +1318,10 @@ class MainActivity : Activity() {
             partsList.addView(row)
         }
         val cabinetSummary = orderCabinets.joinToString("\n") { c -> "${c.name}: ${fmt(c.widthMm)}×${fmt(c.heightMm)}×${fmt(c.depthMm)} mm, ${tr("تعداد", "qty")} ${c.quantity}, ${tr("ضخامت", "thickness")} ${fmt(c.boardThicknessMm)} mm" }
-        resultText.text = if (english) "Multi-cabinet order\n$cabinetSummary\nSheets: $latestSheetCount\nEstimated area-based waste: ${fmt(waste)}%\nSeparate back panels: ${fmt(backArea)} m²\nEstimated PVC: ${fmt(pvcMeters)} m\n\nWarning: planning-level row packing; verify all dimensions and grain direction before cutting." else "سفارش چند کابینتی\n$cabinetSummary\nتعداد ورق: ${faDigits(latestSheetCount.toString())}\nدورریز تخمینی بر اساس مساحت: ${faDigits(fmt(waste))}٪\nپشت‌بند جداگانه: ${faDigits(fmt(backArea))} مترمربع\nPVC تخمینی: ${faDigits(fmt(pvcMeters))} متر\n\nهشدار: چیدمان تخمینی است؛ پیش از برش، ابعاد و جهت رگه را بررسی کنید."
+        val productSummary = orderProductLines.joinToString("\n") { line -> "${line.name}: ${line.parts.size} ${tr("نوع قطعه", "part types")}, ${tr("تعداد قطعه", "pieces")} ${line.parts.sumOf { it.quantity } * line.quantity}" }
+        val customSummary = (customParts + independentParts).joinToString("\n") { part -> "${part.name}: ${fmt(part.lengthMm)}×${fmt(part.widthMm)} mm × ${part.quantity}" }
+        val orderSummary = listOf(cabinetSummary, productSummary, customSummary).filter { it.isNotBlank() }.joinToString("\n")
+        resultText.text = if (english) "Mixed order\n$orderSummary\nSheets: $latestSheetCount\nEstimated area-based waste: ${fmt(waste)}%\nSeparate back panels: ${fmt(backArea)} m²\nEstimated PVC: ${fmt(pvcMeters)} m\n\nWarning: cutting layout is an estimate; verify dimensions and grain direction before production." else "سفارش مشترک\n$orderSummary\nتعداد ورق: ${faDigits(latestSheetCount.toString())}\nدورریز تخمینی بر اساس مساحت: ${faDigits(fmt(waste))}٪\nپشت‌بند جداگانه: ${faDigits(fmt(backArea))} مترمربع\nPVC تخمینی: ${faDigits(fmt(pvcMeters))} متر\n\nهشدار: نقشه برش تخمینی است؛ پیش از ساخت، ابعاد و جهت رگه را بررسی کنید."
         updatePriceEstimate()
     }
 
