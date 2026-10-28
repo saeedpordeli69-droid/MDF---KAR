@@ -201,7 +201,7 @@ internal fun MainActivity.buildScreen() {
 
         val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
         cabinetSpinner = Spinner(this).apply {
-            val cabinetTypes = if (english) arrayOf("Independent cutting", "Base cabinet", "Wall cabinet") else arrayOf("برش مستقل", "کابینت زمینی", "کابینت دیواری")
+            val cabinetTypes = if (english) arrayOf("Independent cut", "Base cabinet", "Wall cabinet") else arrayOf("برش مستقل", "کابینت زمینی", "کابینت دیواری")
             adapter = object : ArrayAdapter<String>(this@buildScreen, android.R.layout.simple_spinner_item, cabinetTypes) {
                 override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                     return (super.getView(position, convertView, parent) as TextView).apply {
@@ -219,7 +219,7 @@ internal fun MainActivity.buildScreen() {
                     }
                 }
             }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-            setSelection(prefs().getInt("cabinetType", 0).coerceIn(0, 2))
+            setSelection(prefs().getInt("cabinetType", 1).coerceIn(0, 2))
             background = rounded(Color.rgb(12, 37, 63), 12, Color.rgb(39, 105, 159), 1)
             setPadding(dp(8), dp(4), dp(8), dp(4))
             dropDownVerticalOffset = dp(4)
@@ -264,7 +264,7 @@ internal fun MainActivity.buildScreen() {
                 val idx = orderCabinets.size + 1
                 val spec = CabinetSpec(
                     id = "cabinet_$idx", name = if (english) "Cabinet $idx" else "کابینت ${faDigits(idx.toString())}",
-                    cabinetType = if (cabinetSpinner.selectedItemPosition == 2) CabinetType.WALL else CabinetType.BASE,
+                    cabinetType = if (cabinetSpinner.selectedItemPosition == 0) CabinetType.BASE else CabinetType.WALL,
                     widthMm = cw, heightMm = ch, depthMm = cd, boardThicknessMm = ct,
                     shelfCount = cs, doorCount = cdoors, quantity = cq, plinthMm = cp,
                     includeBack = includeBackCheck.isChecked, backThicknessMm = cb, stockType = "MDF", grainSensitive = true
@@ -279,92 +279,16 @@ internal fun MainActivity.buildScreen() {
             Toast.makeText(this, tr("سفارش پاک شد؛ محاسبه دوباره از مشخصات فعلی انجام می‌شود.", "Order cleared; calculation will use current dimensions."), Toast.LENGTH_SHORT).show()
         }, 8)
 
-        // Initialize the section before creating a click listener that references it.
-        // Kotlin otherwise rejects access to the lateinit property's backing field here.
-        customPartsSection = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
-        }
-        customPartsToggleButton = button("＋ قطعات سفارشی (۰)", "+ Custom parts (0)") {
-            customPartsSection.visibility = if (customPartsSection.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-            updateCustomPartsToggleLabel()
-        }.apply {
-            minHeight = dp(44)
-            textSize = 13f
-        }
-        addTo(cabinetCard, customPartsToggleButton, 7)
-        addTo(cabinetCard, customPartsSection, 2)
-        addTo(customPartsSection, TextView(this).apply {
-            text = tr("قطعهٔ مستقل یا وابسته به ابعاد کابینت اضافه کنید.", "Add a standalone part or one linked to cabinet dimensions.")
-            textSize = 11f; setTextColor(muted); setPadding(0, 0, 0, dp(5))
-        }, 3)
-        customPartNameInput = field("نام قطعه", "Part name", "customPartName", "لبه جلوی طبقه")
-        customPartLengthInput = field("طول (mm)", "Length (mm)", "customPartLength", "۸۰۰")
-        customPartWidthInput = field("عرض (mm)", "Width (mm)", "customPartWidth", "۵۰")
-        customPartQtyInput = field("تعداد", "Quantity", "customPartQty", "۴")
-        customPartThicknessInput = field("ضخامت ورق (mm)", "Board thickness (mm)", "customPartThickness", "۱۶")
-        pairedRow(customPartsSection, fieldCell("نام قطعه", "Part name", customPartNameInput), fieldCell("تعداد", "Quantity", customPartQtyInput))
-        pairedRow(customPartsSection, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
-        addTo(customPartsSection, fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput), 6)
-        customPartModeSpinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@buildScreen, android.R.layout.simple_spinner_dropdown_item,
-                if (english) listOf("Standalone part", "Linked to cabinet") else listOf("قطعه مستقل", "وابسته به کابینت"))
-        }
-        addTo(customPartsSection, label("نوع قطعه", "Part type", 12f), 2)
-        addTo(customPartsSection, customPartModeSpinner, 5)
-        customPartCabinetSpinner = Spinner(this)
-        customPartDimensionSpinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@buildScreen, android.R.layout.simple_spinner_dropdown_item,
-                if (english) listOf("Use cabinet width", "Use cabinet height", "Use cabinet depth") else listOf("طول برابر عرض کابینت", "طول برابر ارتفاع کابینت", "طول برابر عمق کابینت"))
-        }
-        addTo(customPartsSection, label("برای قطعه وابسته: کابینت و بُعد مرجع", "For linked part: cabinet and reference dimension", 12f), 2)
-        addTo(customPartsSection, customPartCabinetSpinner, 3)
-        addTo(customPartsSection, customPartDimensionSpinner, 6)
-        customPartsListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        addTo(customPartsSection, customPartsListView, 5)
-        addTo(customPartsSection, button("＋ افزودن قطعه سفارشی", "+ Add custom part") {
-            val name = customPartNameInput.text.toString().trim()
-            val length = number(customPartLengthInput.text.toString())
-            val width = number(customPartWidthInput.text.toString())
-            val qty = number(customPartQtyInput.text.toString())?.toInt()
-            val thickness = number(customPartThicknessInput.text.toString())
-            val linked = customPartModeSpinner.selectedItemPosition == 1
-            val cabinetIndex = customPartCabinetSpinner.selectedItemPosition
-            if (name.isBlank() || length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0 || (linked && cabinetIndex !in orderCabinets.indices)) {
-                Toast.makeText(this, tr("نام، ابعاد، ضخامت و تعداد را بررسی کنید. برای قطعه وابسته ابتدا کابینت را به سفارش اضافه کنید.", "Check name, dimensions, thickness and quantity. Add a cabinet before linking a part."), Toast.LENGTH_LONG).show()
-            } else {
-                val linkedCabinet = if (linked) orderCabinets[cabinetIndex] else null
-                val dimension = if (linked) customPartDimensionSpinner.selectedItemPosition else -1
-                customParts += CustomOrderPart(name, length, width, qty, thickness, linkedCabinet?.id, dimension)
-                refreshCustomPartsList()
-                Toast.makeText(this, tr("قطعه به سفارش اضافه شد.", "Custom part added to order."), Toast.LENGTH_SHORT).show()
-            }
-        }, 7)
-        addTo(customPartsSection, button("پاک کردن قطعات سفارشی", "Clear custom parts") {
-            customParts.clear(); refreshCustomPartsList()
-            Toast.makeText(this, tr("قطعات سفارشی پاک شدند.", "Custom parts cleared."), Toast.LENGTH_SHORT).show()
-        }, 8)
-
-        // Set the selector listener only after all referenced views are initialized.
-        val partsSectionRef = customPartsSection
-        val partsToggleRef = customPartsToggleButton
-        val partModeSpinnerRef = customPartModeSpinner
-        cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val independent = position == 0
-                partsSectionRef.visibility = if (independent) View.VISIBLE else View.GONE
-                partsToggleRef.visibility = View.GONE
-                partModeSpinnerRef.setSelection(0)
-                updateCustomPartsToggleLabel()
-                for (index in 4..8) {
-                    if (index < partsSectionRef.childCount) partsSectionRef.getChildAt(index).visibility = View.GONE
-                }
-                for (index in 9..11) {
-                    if (index < partsSectionRef.childCount) partsSectionRef.getChildAt(index).visibility = View.GONE
-                }
-            }
-        }
+        // Independent cut form: direct dimensions, with no automatic cabinet adjustments.
+        val independentCutCard = addSection(homePage, "مشخصات برش مستقل", "Independent cut details", "ابعاد قطعه دقیقاً همان مقادیری است که وارد می‌کنید", "Part dimensions are used exactly as entered")
+        customPartNameInput = field("نام قطعه", "Part name", "customPartName", "قطعه").apply { inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES }
+        customPartLengthInput = field("طول قطعه (میلی‌متر)", "Part length (mm)", "customPartLength", "۸۰۰")
+        customPartWidthInput = field("عرض قطعه (میلی‌متر)", "Part width (mm)", "customPartWidth", "۵۰۰")
+        customPartQtyInput = field("تعداد", "Quantity", "customPartQty", "۱")
+        customPartThicknessInput = field("ضخامت ورق (میلی‌متر)", "Board thickness (mm)", "customPartThickness", "۱۶")
+        addTo(independentCutCard, fieldCell("نام قطعه", "Part name", customPartNameInput), 5)
+        pairedRow(independentCutCard, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
+        pairedRow(independentCutCard, fieldCell("تعداد", "Quantity", customPartQtyInput), fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput))
 
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
