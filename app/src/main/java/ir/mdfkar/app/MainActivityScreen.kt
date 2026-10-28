@@ -199,9 +199,57 @@ internal fun MainActivity.buildScreen() {
         addTo(sheetCard, label("ضخامت تیغه برش (میلی‌متر)", "Saw kerf (mm)", 12f))
         addTo(sheetCard, kerfInput, 1)
 
-        val modeCard = addSection(homePage, "نوع عملیات", "Operation mode", "حالت موردنظر را انتخاب کنید", "Choose the operation mode")
+        // PRODUCT TYPE: first UI step toward supporting all MDF-KAR product families.
+        // Kept separate from cabinetSpinner so existing cabinet calculations remain unchanged.
+        val productTypeCard = addSection(
+            homePage,
+            "نوع محصول",
+            "Product type",
+            "نوع محصول موردنظر را انتخاب کنید",
+            "Choose the product family you want to create"
+        )
+        val productTypeSpinner = Spinner(this).apply {
+            val productTypes = if (english) arrayOf(
+                "Cabinet", "Wardrobe", "Bookcase / Shelving", "Desk / Table",
+                "Shop counter", "Reception counter", "TV wall / Decor",
+                "Bathroom vanity", "Custom product"
+            ) else arrayOf(
+                "کابینت", "کمد", "کتابخانه و قفسه", "میز",
+                "پیشخوان فروشگاهی", "پیشخوان اداری", "دیوار تلویزیون و دکور",
+                "کابینت روشویی", "محصول سفارشی"
+            )
+            adapter = object : ArrayAdapter<String>(this@buildScreen, android.R.layout.simple_spinner_item, productTypes) {
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                    return (super.getView(position, convertView, parent) as TextView).apply {
+                        setTextColor(AppTheme.TEXT)
+                        textSize = 15f
+                        setPadding(dp(10), dp(8), dp(10), dp(8))
+                    }
+                }
+                override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                    return (super.getDropDownView(position, convertView, parent) as TextView).apply {
+                        setTextColor(AppTheme.TEXT)
+                        textSize = 15f
+                        setBackgroundColor(Color.rgb(7, 24, 43))
+                        setPadding(dp(16), dp(12), dp(16), dp(12))
+                    }
+                }
+            }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        }
+        addTo(productTypeCard, productTypeSpinner, 2)
+        addTo(productTypeCard, TextView(this).apply {
+            text = tr(
+                "انتخاب نوع محصول فعلاً به‌صورت رابط کاربری اضافه شده است؛ اتصال هر نوع به فرم و محاسبات در مرحله بعد انجام می‌شود.",
+                "Product selection is added as UI; connecting each type to its own form and calculations comes in the next step."
+            )
+            textSize = 11f
+            setTextColor(AppTheme.TEXT_SECONDARY)
+            setPadding(0, dp(4), 0, 0)
+        }, 1)
+
+        val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
         cabinetSpinner = Spinner(this).apply {
-            val cabinetTypes = if (english) arrayOf("Independent cut", "Base cabinet", "Wall cabinet") else arrayOf("برش مستقل", "کابینت زمینی", "کابینت دیواری")
+            val cabinetTypes = if (english) arrayOf("Independent cutting", "Base cabinet", "Wall cabinet") else arrayOf("برش مستقل", "کابینت زمینی", "کابینت دیواری")
             adapter = object : ArrayAdapter<String>(this@buildScreen, android.R.layout.simple_spinner_item, cabinetTypes) {
                 override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                     return (super.getView(position, convertView, parent) as TextView).apply {
@@ -219,14 +267,32 @@ internal fun MainActivity.buildScreen() {
                     }
                 }
             }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-            setSelection(prefs().getInt("cabinetType", 1).coerceIn(0, 2))
+            setSelection(prefs().getInt("cabinetType", 0).coerceIn(0, 2))
             background = rounded(Color.rgb(12, 37, 63), 12, Color.rgb(39, 105, 159), 1)
             setPadding(dp(8), dp(4), dp(8), dp(4))
             dropDownVerticalOffset = dp(4)
             dropDownWidth = ViewGroup.LayoutParams.MATCH_PARENT
         }
-        addTo(modeCard, cabinetSpinner, 8)
-        val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "ابعاد بدنه کابینت", "Cabinet carcass dimensions")
+        addTo(cabinetCard, cabinetSpinner, 8)
+        cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                // Selection now visibly switches between direct independent-part entry and
+                // the normal cabinet dimension form.
+                runCatching {
+                    val independent = position == 0
+                    customPartsSection.visibility = if (independent) View.VISIBLE else View.GONE
+                    customPartsToggleButton.visibility = View.GONE
+                    customPartModeSpinner.setSelection(0)
+                    updateCustomPartsToggleLabel()
+                    if (::customPartsSection.isInitialized) {
+                        // Hide the old linked/custom-part workflow: independent cutting is direct.
+                        for (index in 4..8) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
+                        for (index in 9..11) if (index < customPartsSection.childCount) customPartsSection.getChildAt(index).visibility = View.GONE
+                    }
+                }
+            }
+        }
         widthInput = field("عرض کابینت", "Cabinet width", "width", "۸۰۰")
         heightInput = field("ارتفاع کابینت", "Cabinet height", "height", "۷۲۰")
         depthInput = field("عمق کابینت", "Cabinet depth", "depth", "۵۶۰")
@@ -248,6 +314,7 @@ internal fun MainActivity.buildScreen() {
             textSize = 11f; setTextColor(muted); setPadding(0, 0, 0, dp(7))
         }, 4)
         orderListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        addTo(cabinetCard, orderListView, 6)
         addTo(cabinetCard, button("＋ افزودن کابینت فعلی به سفارش", "+ Add current cabinet to order") {
             val cw = number(widthInput.text.toString())
             val ch = number(heightInput.text.toString())
@@ -264,7 +331,7 @@ internal fun MainActivity.buildScreen() {
                 val idx = orderCabinets.size + 1
                 val spec = CabinetSpec(
                     id = "cabinet_$idx", name = if (english) "Cabinet $idx" else "کابینت ${faDigits(idx.toString())}",
-                    cabinetType = if (cabinetSpinner.selectedItemPosition == 0) CabinetType.BASE else CabinetType.WALL,
+                    cabinetType = if (cabinetSpinner.selectedItemPosition == 2) CabinetType.WALL else CabinetType.BASE,
                     widthMm = cw, heightMm = ch, depthMm = cd, boardThicknessMm = ct,
                     shelfCount = cs, doorCount = cdoors, quantity = cq, plinthMm = cp,
                     includeBack = includeBackCheck.isChecked, backThicknessMm = cb, stockType = "MDF", grainSensitive = true
@@ -279,50 +346,69 @@ internal fun MainActivity.buildScreen() {
             Toast.makeText(this, tr("سفارش پاک شد؛ محاسبه دوباره از مشخصات فعلی انجام می‌شود.", "Order cleared; calculation will use current dimensions."), Toast.LENGTH_SHORT).show()
         }, 8)
 
-        // Independent cut form: direct dimensions, with no automatic cabinet adjustments.
-        val independentCutCard = addSection(homePage, "مشخصات برش مستقل", "Independent cut details", "", "")
-        customPartNameInput = field("نام قطعه", "Part name", "customPartName", "").apply { inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES; hint = "" }
-        customPartLengthInput = field("طول قطعه (میلی‌متر)", "Part length (mm)", "customPartLength", "۸۰۰")
-        customPartWidthInput = field("عرض قطعه (میلی‌متر)", "Part width (mm)", "customPartWidth", "۵۰۰")
-        customPartQtyInput = field("تعداد", "Quantity", "customPartQty", "۱")
-        customPartThicknessInput = field("ضخامت ورق (میلی‌متر)", "Board thickness (mm)", "customPartThickness", "۱۶")
-        addTo(independentCutCard, customPartNameInput.apply { setPadding(dp(10), dp(8), dp(10), dp(8)); background = rounded(Color.rgb(10, 31, 53), 13, Color.rgb(43, 102, 153), 1) }, 5)
-        pairedRow(independentCutCard, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
-        pairedRow(independentCutCard, fieldCell("تعداد", "Quantity", customPartQtyInput), fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput))
+        customPartsToggleButton = button("＋ قطعات سفارشی (۰)", "+ Custom parts (0)") {
+            customPartsSection.visibility = if (customPartsSection.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            updateCustomPartsToggleLabel()
+        }.apply {
+            minHeight = dp(44)
+            textSize = 13f
+        }
+        addTo(cabinetCard, customPartsToggleButton, 7)
+        customPartsSection = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        addTo(cabinetCard, customPartsSection, 2)
+        addTo(customPartsSection, TextView(this).apply {
+            text = tr("قطعهٔ مستقل یا وابسته به ابعاد کابینت اضافه کنید.", "Add a standalone part or one linked to cabinet dimensions.")
+            textSize = 11f; setTextColor(muted); setPadding(0, 0, 0, dp(5))
+        }, 3)
+        customPartNameInput = field("نام قطعه", "Part name", "customPartName", "لبه جلوی طبقه")
+        customPartLengthInput = field("طول (mm)", "Length (mm)", "customPartLength", "۸۰۰")
+        customPartWidthInput = field("عرض (mm)", "Width (mm)", "customPartWidth", "۵۰")
+        customPartQtyInput = field("تعداد", "Quantity", "customPartQty", "۴")
+        customPartThicknessInput = field("ضخامت ورق (mm)", "Board thickness (mm)", "customPartThickness", "۱۶")
+        pairedRow(customPartsSection, fieldCell("نام قطعه", "Part name", customPartNameInput), fieldCell("تعداد", "Quantity", customPartQtyInput))
+        pairedRow(customPartsSection, fieldCell("طول (mm)", "Length (mm)", customPartLengthInput), fieldCell("عرض (mm)", "Width (mm)", customPartWidthInput))
+        addTo(customPartsSection, fieldCell("ضخامت ورق (mm)", "Board thickness (mm)", customPartThicknessInput), 6)
+        customPartModeSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@buildScreen, android.R.layout.simple_spinner_dropdown_item,
+                if (english) listOf("Standalone part", "Linked to cabinet") else listOf("قطعه مستقل", "وابسته به کابینت"))
+        }
+        addTo(customPartsSection, label("نوع قطعه", "Part type", 12f), 2)
+        addTo(customPartsSection, customPartModeSpinner, 5)
+        customPartCabinetSpinner = Spinner(this)
+        customPartDimensionSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@buildScreen, android.R.layout.simple_spinner_dropdown_item,
+                if (english) listOf("Use cabinet width", "Use cabinet height", "Use cabinet depth") else listOf("طول برابر عرض کابینت", "طول برابر ارتفاع کابینت", "طول برابر عمق کابینت"))
+        }
+        addTo(customPartsSection, label("برای قطعه وابسته: کابینت و بُعد مرجع", "For linked part: cabinet and reference dimension", 12f), 2)
+        addTo(customPartsSection, customPartCabinetSpinner, 3)
+        addTo(customPartsSection, customPartDimensionSpinner, 6)
         customPartsListView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        addTo(independentCutCard, button("＋ ثبت قطعه در فهرست", "+ Add part to list") {
+        addTo(customPartsSection, customPartsListView, 5)
+        addTo(customPartsSection, button("＋ افزودن قطعه سفارشی", "+ Add custom part") {
             val name = customPartNameInput.text.toString().trim()
             val length = number(customPartLengthInput.text.toString())
             val width = number(customPartWidthInput.text.toString())
             val qty = number(customPartQtyInput.text.toString())?.toInt()
             val thickness = number(customPartThicknessInput.text.toString())
-            if (length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0) {
-                Toast.makeText(this, tr("طول، عرض، ضخامت و تعداد را معتبر وارد کنید.", "Enter valid length, width, thickness and quantity."), Toast.LENGTH_LONG).show()
+            val linked = customPartModeSpinner.selectedItemPosition == 1
+            val cabinetIndex = customPartCabinetSpinner.selectedItemPosition
+            if (name.isBlank() || length == null || width == null || qty == null || thickness == null || length <= 0 || width <= 0 || qty !in 1..1000 || thickness <= 0 || (linked && cabinetIndex !in orderCabinets.indices)) {
+                Toast.makeText(this, tr("نام، ابعاد، ضخامت و تعداد را بررسی کنید. برای قطعه وابسته ابتدا کابینت را به سفارش اضافه کنید.", "Check name, dimensions, thickness and quantity. Add a cabinet before linking a part."), Toast.LENGTH_LONG).show()
             } else {
-                val nextNumber = independentParts.size + 1
-                val partName = name.ifBlank { if (english) "Independent $nextNumber" else "مستقل ${faDigits(nextNumber.toString())}" }
-                independentParts += CustomOrderPart(partName, length, width, qty, thickness)
-                refreshOrderList()
-                customPartNameInput.setText("")
-                Toast.makeText(this, tr("قطعه به فهرست مستقل اضافه شد.", "Part added to independent list."), Toast.LENGTH_SHORT).show()
+                val linkedCabinet = if (linked) orderCabinets[cabinetIndex] else null
+                val dimension = if (linked) customPartDimensionSpinner.selectedItemPosition else -1
+                customParts += CustomOrderPart(name, length, width, qty, thickness, linkedCabinet?.id, dimension)
+                refreshCustomPartsList()
+                Toast.makeText(this, tr("قطعه به سفارش اضافه شد.", "Custom part added to order."), Toast.LENGTH_SHORT).show()
             }
-        }, 5)
-        // A single shared order list is shown for cabinets and independent cuts.
-        addTo(homePage, label("فهرست سفارش", "Order list", 14f), 4)
-        addTo(homePage, orderListView, 8)
-
-        // The selected mode controls which input card is visible.
-        fun updateModeVisibility() {
-            val independent = cabinetSpinner.selectedItemPosition == 0
-            independentCutCard.visibility = if (independent) View.VISIBLE else View.GONE
-            cabinetCard.visibility = if (independent) View.GONE else View.VISIBLE
-            prefs().edit().putInt("cabinetType", cabinetSpinner.selectedItemPosition).apply()
-        }
-        cabinetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) = updateModeVisibility()
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-        }
-        updateModeVisibility()
+        }, 7)
+        addTo(customPartsSection, button("پاک کردن قطعات سفارشی", "Clear custom parts") {
+            customParts.clear(); refreshCustomPartsList()
+            Toast.makeText(this, tr("قطعات سفارشی پاک شدند.", "Custom parts cleared."), Toast.LENGTH_SHORT).show()
+        }, 8)
 
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
