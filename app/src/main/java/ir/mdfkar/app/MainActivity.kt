@@ -113,6 +113,12 @@ class MainActivity : Activity() {
     internal lateinit var productDoorInput: EditText
     internal lateinit var productQuantityInput: EditText
     internal lateinit var productIncludeBackCheck: CheckBox
+    internal lateinit var productLeftModuleSpinner: Spinner
+    internal lateinit var productRightModuleSpinner: Spinner
+    internal lateinit var productDrawerCountInput: EditText
+    internal lateinit var bookcaseBaseTypeSpinner: Spinner
+    internal lateinit var bookcaseBaseHeightInput: EditText
+    internal lateinit var productPreviewView: ProductPreviewView
     // Independent cuts are kept in their own list, separate from legacy/custom cabinet parts.
     internal val independentParts = mutableListOf<CustomOrderPart>()
     internal lateinit var orderListView: LinearLayout
@@ -543,9 +549,15 @@ class MainActivity : Activity() {
         val shelves = number(productShelfInput.text.toString())?.toInt()
         val doors = number(productDoorInput.text.toString())?.toInt()
         val quantity = number(productQuantityInput.text.toString())?.toInt()
+        val drawerCount = if (::productDrawerCountInput.isInitialized) number(productDrawerCountInput.text.toString())?.toInt() ?: 2 else 2
+        val leftModule = if (::productLeftModuleSpinner.isInitialized) productLeftModuleSpinner.selectedItemPosition else 0
+        val rightModule = if (::productRightModuleSpinner.isInitialized) productRightModuleSpinner.selectedItemPosition else 1
+        val bookcaseBase = if (::bookcaseBaseTypeSpinner.isInitialized) bookcaseBaseTypeSpinner.selectedItemPosition else 0
+        val bookcaseBaseHeight = if (::bookcaseBaseHeightInput.isInitialized) number(bookcaseBaseHeightInput.text.toString()) ?: (h ?: 900.0) * 0.33 else (h ?: 900.0) * 0.33
         if (w == null || h == null || d == null || t == null || shelves == null || doors == null || quantity == null ||
             w <= 0 || h <= 0 || d <= 0 || t <= 0 || w <= 2 * t || h <= t ||
-            shelves !in 0..30 || doors !in 0..12 || quantity !in 1..100) {
+            shelves !in 0..30 || doors !in 0..12 || quantity !in 1..100 || drawerCount !in 1..8 ||
+            (selectedProductTypeIndex == 2 && (bookcaseBaseHeight <= 2 * t || bookcaseBaseHeight >= h))) {
             resultText.text = tr(
                 "ابعاد کلی، ضخامت و تعداد محصول را معتبر وارد کنید. تعداد طبقه ۰ تا ۳۰، درها ۰ تا ۱۲ و تعداد محصول ۱ تا ۱۰۰ باشد.",
                 "Enter valid overall dimensions, board thickness and product quantity. Shelves: 0–30, doors: 0–12, products: 1–100."
@@ -568,14 +580,34 @@ class MainActivity : Activity() {
         fun doorParts() {
             if (doors > 0) addPart("درب", "Door", h, w / doors, doors)
         }
+        fun drawerModule(moduleWidth: Double, moduleHeight: Double, drawerTotal: Int, prefixFa: String, prefixEn: String) {
+            if (moduleWidth <= 2 * t || moduleHeight <= 2 * t || drawerTotal <= 0) return
+            val frontH = (moduleHeight / drawerTotal - t).coerceAtLeast(t)
+            val innerW = (moduleWidth - 2 * t).coerceAtLeast(t)
+            val innerD = (d - 100.0).coerceAtLeast(t)
+            addPart("$prefixFa؛ نمای کشو", "$prefixEn drawer front", frontH, innerW, drawerTotal)
+            addPart("$prefixFa؛ بغل کشو", "$prefixEn drawer side", innerD, frontH - t, drawerTotal * 2)
+            addPart("$prefixFa؛ پشت کشو", "$prefixEn drawer back", frontH - t, innerW, drawerTotal)
+            addPart("$prefixFa؛ کف کشو", "$prefixEn drawer bottom", innerD, innerW, drawerTotal)
+        }
 
         when (selectedProductTypeIndex) {
             1 -> { // Wardrobe
                 sides(); topBottom(); shelfParts(); doorParts(); backPanel()
             }
-            2 -> { // Bookcase / shelving
-                sides(); topBottom(); shelfParts(); backPanel()
-                addPart("تقسیم‌کننده عمودی", "Vertical divider", h - 2 * t, d, 1)
+            2 -> { // Bookcase with a configurable lower module and upper shelves.
+                addPart("بغل کتابخانه", "Bookcase side", h, d, 2)
+                addPart("بالا و کف کتابخانه", "Bookcase top and bottom", w - 2 * t, d, 2)
+                val upperHeight = (h - bookcaseBaseHeight - 2 * t).coerceAtLeast(0.0)
+                if (shelves > 0 && upperHeight > 0) addPart("طبقه بخش بالایی", "Upper bookcase shelf", w - 2 * t, d, shelves)
+                addPart("طبقه روی کمد پایین", "Lower cabinet top shelf", w - 2 * t, d, 1)
+                addPart("تقسیم‌کننده عمودی", "Vertical divider", upperHeight, d, 1)
+                when (bookcaseBase) {
+                    0 -> addPart("درب کمد پایین", "Lower cabinet door", bookcaseBaseHeight - t, (w - 2 * t) / 2.0, 2)
+                    1 -> drawerModule(w, bookcaseBaseHeight, drawerCount, "کشوی پایین", "Lower drawer")
+                    else -> addPart("طبقه‌های قسمت پایین", "Lower open shelves", w - 2 * t, d, 2)
+                }
+                backPanel()
             }
             3 -> { // Desk / table
                 addPart("صفحه روی میز", "Tabletop", w, d, 1)
@@ -583,17 +615,26 @@ class MainActivity : Activity() {
                 addPart("تیرک طولی زیر میز", "Long apron", w - 2 * t, 100.0, 2)
                 addPart("تیرک عرضی زیر میز", "Short apron", d - 2 * t, 100.0, 2)
             }
-            4 -> { // Shop counter
-                addPart("پنل جلوی پیشخوان", "Counter front panel", w, h, 1)
-                addPart("پنل کناری پیشخوان", "Counter side panel", h, d, 2)
-                addPart("صفحه روی پیشخوان", "Countertop", w, d, 1)
-                shelfParts(); backPanel()
-            }
-            5 -> { // Reception counter
-                addPart("نمای جلوی کانتر", "Reception front fascia", w, h, 1)
-                addPart("پنل کناری کانتر", "Reception side panel", h, d, 2)
-                addPart("صفحه کار کانتر", "Reception worktop", w, d, 1)
-                addPart("طبقه داخلی", "Inner shelf", w - 2 * t, d - t, shelves)
+            4, 5 -> { // Modular shop/reception counter: selectable drawers, cabinet, shelves or open space.
+                val leftW = w / 2.0
+                val rightW = w - leftW
+                addPart("بغل پیشخوان", "Counter side panel", h, d, 2)
+                addPart("تقسیم‌کننده مرکزی پیشخوان", "Counter center divider", h - t, d, 1)
+                addPart("کف بخش چپ و راست", "Left/right module bottom", leftW - t, d, 2)
+                addPart(if (selectedProductTypeIndex == 4) "صفحه روی پیشخوان" else "صفحه کار کانتر", if (selectedProductTypeIndex == 4) "Shop counter top" else "Reception worktop", w, d, 1)
+                fun addModule(module: Int, moduleWidth: Double, sideFa: String, sideEn: String) {
+                    when (module) {
+                        0 -> drawerModule(moduleWidth, h - t, drawerCount, "$sideFa؛ کشو", "$sideEn drawer")
+                        1 -> {
+                            addPart("$sideFa؛ درب کمد", "$sideEn cabinet door", h - 2 * t, (moduleWidth - 2 * t) / 2.0, 2)
+                            if (shelves > 0) addPart("$sideFa؛ طبقه کمد", "$sideEn cabinet shelf", moduleWidth - 2 * t, d - t, shelves)
+                        }
+                        2 -> if (shelves > 0) addPart("$sideFa؛ طبقه باز", "$sideEn open shelf", moduleWidth - 2 * t, d - t, shelves)
+                    }
+                }
+                addModule(leftModule, leftW, "بخش چپ", "Left module")
+                addModule(rightModule, rightW, "بخش راست", "Right module")
+                backPanel()
             }
             6 -> { // TV wall / decor
                 addPart("پنل اصلی دکور", "Main decor panel", w, h, 1)
