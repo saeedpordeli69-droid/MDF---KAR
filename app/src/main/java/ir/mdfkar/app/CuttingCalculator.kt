@@ -47,11 +47,12 @@ object CuttingCalculator {
     )
     private data class Layout(
         val result: CuttingPackResult,
-        val freeArea: Double,
+        val firstSheetUsedArea: Double,
         val remnantScore: Double,
         val usableRemnantScore: Double,
         val fragmentation: Int,
-        val compactness: Double
+        val compactness: Double,
+        val totalOccupiedArea: Double
     )
 
     fun packParts(
@@ -127,21 +128,25 @@ object CuttingCalculator {
     private fun area(p: CuttingPart) = p.width * p.height
 
     private fun isBetter(a: Layout, b: Layout): Boolean {
+        // Priority 1: use the fewest sheets.
         if (a.result.sheetCount != b.result.sheetCount) {
             return a.result.sheetCount < b.result.sheetCount
         }
         val eps = 0.0001
-        if (a.freeArea < b.freeArea - eps) return true
-        if (a.freeArea > b.freeArea + eps) return false
-        if (a.remnantScore > b.remnantScore + eps) return true
-        if (a.remnantScore < b.remnantScore - eps) return false
+        // Priority 2: pack sheet 1 as fully as possible. This directly addresses
+        // the observed behavior where a part moves to the next sheet unnecessarily.
+        if (a.firstSheetUsedArea > b.firstSheetUsedArea + eps) return true
+        if (a.firstSheetUsedArea < b.firstSheetUsedArea - eps) return false
+        // Priority 3: preserve large, reasonably shaped reusable offcuts.
         if (a.usableRemnantScore > b.usableRemnantScore + eps) return true
         if (a.usableRemnantScore < b.usableRemnantScore - eps) return false
+        if (a.remnantScore > b.remnantScore + eps) return true
+        if (a.remnantScore < b.remnantScore - eps) return false
+        // Prefer fewer disconnected free rectangles and tighter, lower-left layouts.
         if (a.fragmentation != b.fragmentation) return a.fragmentation < b.fragmentation
         if (a.compactness < b.compactness - eps) return true
         if (a.compactness > b.compactness + eps) return false
-        return a.result.placements.count { it.width > 0 && it.height > 0 } >
-            b.result.placements.count { it.width > 0 && it.height > 0 }
+        return a.totalOccupiedArea > b.totalOccupiedArea + eps
     }
 
     private fun packInOrder(
@@ -229,7 +234,9 @@ object CuttingCalculator {
 
         val sheetCount = freeBySheet.size
         val placedArea = placements.sumOf { it.width * it.height }
-        val freeArea = max(0.0, sheetCount * sheetArea - placedArea)
+        val firstSheetUsedArea = placements.asSequence()
+            .filter { it.sheet == 0 && it.width <= sheetW && it.height <= sheetH }
+            .sumOf { it.width * it.height }
         val remnantScore = freeBySheet.sumOf { freeRects -> freeRects.maxOfOrNull { it.w * it.h } ?: 0.0 }
         // Prefer keeping at least one reasonably sized rectangular offcut on each sheet.
         // A free rectangle counts as reusable only when both dimensions are meaningful,
@@ -242,8 +249,10 @@ object CuttingCalculator {
         }
         val fragmentation = freeBySheet.sumOf { it.size }
         val compactness = placements.sumOf { it.x + it.y }
-        return Layout(CuttingPackResult(placements, sheetCount), freeArea, remnantScore,
-            usableRemnantScore, fragmentation, compactness)
+        return Layout(
+            CuttingPackResult(placements, sheetCount), firstSheetUsedArea, remnantScore,
+            usableRemnantScore, fragmentation, compactness, placedArea
+        )
     }
 
     private fun compareCandidate(a: Candidate, b: Candidate, scoreMode: Int): Int {
