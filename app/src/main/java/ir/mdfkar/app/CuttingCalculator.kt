@@ -110,7 +110,7 @@ object CuttingCalculator {
 
         var best: Layout? = null
         for (order in orders + extraOrders) {
-            for (scoreMode in 0..4) {
+            for (scoreMode in 0..6) {
                 val candidate = packInOrder(order, sheetW, sheetH, max(0.0, kerf), scoreMode)
                 if (best == null || isBetter(candidate, best!!)) best = candidate
             }
@@ -225,8 +225,12 @@ object CuttingCalculator {
     }
 
     private fun compareCandidate(a: Candidate, b: Candidate, scoreMode: Int): Int {
+        // Modes 5 and 6 compare fit quality across ALL existing sheets before preferring
+        // a lower-index sheet. This can preserve a more useful large remnant instead of
+        // always filling the first sheet's earliest free rectangle.
         val sheet = a.sheet.compareTo(b.sheet)
-        if (sheet != 0) return sheet
+        val preferFitAcrossSheets = scoreMode >= 5
+        if (!preferFitAcrossSheets && sheet != 0) return sheet
         val primaryA: Double
         val primaryB: Double
         val secondaryA: Double
@@ -236,13 +240,17 @@ object CuttingCalculator {
             2 -> { primaryA = a.longSide; primaryB = b.longSide; secondaryA = a.shortSide; secondaryB = b.shortSide }
             3 -> { primaryA = a.free.y; primaryB = b.free.y; secondaryA = a.free.x; secondaryB = b.free.x }
             4 -> { primaryA = a.shortSide + a.longSide; primaryB = b.shortSide + b.longSide; secondaryA = a.areaWaste; secondaryB = b.areaWaste }
+            5 -> { primaryA = a.areaWaste; primaryB = b.areaWaste; secondaryA = a.shortSide; secondaryB = b.shortSide }
+            6 -> { primaryA = a.shortSide; primaryB = b.shortSide; secondaryA = a.longSide; secondaryB = b.longSide }
             else -> { primaryA = a.shortSide; primaryB = b.shortSide; secondaryA = a.longSide; secondaryB = b.longSide }
         }
         val primary = primaryA.compareTo(primaryB)
         if (primary != 0) return primary
         val secondary = secondaryA.compareTo(secondaryB)
         if (secondary != 0) return secondary
-        return a.areaWaste.compareTo(b.areaWaste)
+        val areaComparison = a.areaWaste.compareTo(b.areaWaste)
+        if (areaComparison != 0) return areaComparison
+        return if (preferFitAcrossSheets) sheet else 0
     }
 
     private fun splitFreeRects(freeRects: MutableList<Rect>, used: Rect) {
