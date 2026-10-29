@@ -32,6 +32,19 @@ internal class SheetLayoutView(
         textSize = dp(10).toFloat()
         textAlign = Paint.Align.CENTER
     }
+    private val dimensionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AppTheme.TEXT
+        textSize = dp(8).toFloat()
+        textAlign = Paint.Align.CENTER
+    }
+    private val persianDigits = charArrayOf('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹')
+
+    private fun dimensionLabel(value: Double): String {
+        val raw = value.toInt().toString()
+        return buildString(raw.length) {
+            raw.forEach { ch -> append(if (ch in '0'..'9') persianDigits[ch - '0'] else ch) }
+        }
+    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
@@ -84,8 +97,26 @@ internal class SheetLayoutView(
             fill.color = partColor(part.name)
             canvas.drawRect(l, t, r, b, fill)
             canvas.drawRect(l, t, r, b, border)
-            if (r - l > dp(24) && b - t > dp(15)) {
-                canvas.drawText(part.name.take(14), (l + r) / 2f, (t + b) / 2f, textPaint)
+            val partW = r - l
+            val partH = b - t
+            if (partW > dp(28) && partH > dp(16)) {
+                val centerX = (l + r) / 2f
+                val centerY = (t + b) / 2f
+                if (partW > dp(58) && partH > dp(32)) {
+                    val name = part.name.take(14)
+                    val dimensions = "${dimensionLabel(part.width)} × ${dimensionLabel(part.height)}"
+                    val metrics = textPaint.fontMetrics
+                    val lineGap = dp(2).toFloat()
+                    val totalTextHeight = (metrics.descent - metrics.ascent) + dimensionPaint.textSize + lineGap
+                    val firstBaseline = centerY - totalTextHeight / 2f - metrics.ascent
+                    canvas.drawText(name, centerX, firstBaseline, textPaint)
+                    canvas.drawText(dimensions, centerX, firstBaseline + metrics.descent + lineGap + dimensionPaint.textSize, dimensionPaint)
+                    if (part.rotated && partW > dp(78)) {
+                        canvas.drawText("↻", r - dp(9), t + dp(12).toFloat(), dimensionPaint)
+                    }
+                } else {
+                    canvas.drawText(part.name.take(10), centerX, centerY, textPaint)
+                }
             }
         }
         if (currentPlacements.isEmpty()) {
