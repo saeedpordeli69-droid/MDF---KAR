@@ -37,6 +37,19 @@ internal class SheetLayoutView(
         textSize = dp(8).toFloat()
         textAlign = Paint.Align.CENTER
     }
+    private val usageTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AppTheme.TEXT
+        textSize = dp(11).toFloat()
+        textAlign = Paint.Align.RIGHT
+    }
+    private val usageTrackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AppTheme.FIELD_BORDER
+        style = Paint.Style.FILL
+    }
+    private val usageFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AppTheme.ACCENT
+        style = Paint.Style.FILL
+    }
     private val persianDigits = charArrayOf('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹')
 
     private fun dimensionLabel(value: Double): String {
@@ -80,13 +93,39 @@ internal class SheetLayoutView(
         val sh = sheetHeight().toFloat()
         val pad = dp(12).toFloat()
         val availableW = width - pad * 2
-        val availableH = height - pad * 2
+        val headerHeight = dp(30).toFloat()
+        val availableH = height - pad * 2 - headerHeight
         if (availableW <= 0 || availableH <= 0 || sw <= 0f || sh <= 0f) return
+
+        // Show how much of the selected sheet is occupied by parts.
+        val sheetParts = currentPlacements.filter { it.sheet == currentSheet }
+        val sheetArea = sw.toDouble() * sh.toDouble()
+        val usedArea = sheetParts.sumOf { it.width * it.height }
+        val usage = if (sheetArea > 0.0) (usedArea / sheetArea).coerceIn(0.0, 1.0) else 0.0
+        val percent = (usage * 100.0).toInt()
+        usageTextPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            translate("استفاده از ورق: ${dimensionLabel(percent.toDouble())}٪", "Sheet usage: $percent%"),
+            width - pad,
+            pad + usageTextPaint.textSize,
+            usageTextPaint
+        )
+        val barLeft = pad
+        val barRight = width - pad
+        val barTop = pad + dp(18).toFloat()
+        val barBottom = barTop + dp(5).toFloat()
+        val barRadius = dp(3).toFloat()
+        canvas.drawRoundRect(barLeft, barTop, barRight, barBottom, barRadius, barRadius, usageTrackPaint)
+        if (usage > 0.0) {
+            val filledRight = barLeft + (barRight - barLeft) * usage.toFloat()
+            canvas.drawRoundRect(barLeft, barTop, filledRight, barBottom, barRadius, barRadius, usageFillPaint)
+        }
+
         val scale = min(availableW / sw, availableH / sh)
         val sheetPixelW = sw * scale
         val sheetPixelH = sh * scale
         val left = (width - sheetPixelW) / 2f
-        val top = (height - sheetPixelH) / 2f
+        val top = headerHeight + pad + (availableH - sheetPixelH) / 2f
         canvas.drawRect(left, top, left + sheetPixelW, top + sheetPixelH, border)
         currentPlacements.forEach { part ->
             if (part.sheet != currentSheet) return@forEach
