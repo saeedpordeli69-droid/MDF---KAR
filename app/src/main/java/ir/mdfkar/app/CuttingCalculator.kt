@@ -27,8 +27,9 @@ data class CuttingPackResult(val placements: List<SheetPlacement>, val sheetCoun
  * Multi-pass MaxRects-style planner.
  *
  * Unlike a shelf-only planner, it tracks rectangular free areas left between parts.
- * It tries multiple orderings and prefers the layout with the fewest sheets first.
- * This is a planning heuristic, not a certified CNC / guillotine optimizer.
+ * It tries multiple fixed and deterministic shuffled orderings and prefers the layout
+ * with the fewest sheets first. This is a planning heuristic, not a certified CNC /
+ * guillotine optimizer; actual savings depend on the dimensions and stock constraints.
  */
 object CuttingCalculator {
     private data class Rect(val x: Double, val y: Double, val w: Double, val h: Double)
@@ -82,8 +83,33 @@ object CuttingCalculator {
             expanded.sortedWith(compareBy<CuttingPart> { max(it.width, it.height) }.thenBy { min(it.width, it.height) })
         )
 
+        // Add deterministic multi-start trials. Mixed cabinet/table/counter orders often
+        // contain many repeated sizes; shuffled starts can find combinations the fixed
+        // size-based orderings miss. A stable seed keeps the same order reproducible.
+        val seed = expanded.fold(1125899906842597L) { acc, part ->
+            acc * 31L + part.name.hashCode().toLong() +
+                (part.width * 1000.0).toLong() * 17L + (part.height * 1000.0).toLong()
+        }
+        val extraOrders = mutableListOf<List<CuttingPart>>()
+        for (attempt in 0 until 10) {
+            val shuffled = expanded.toMutableList()
+            java.util.Collections.shuffle(shuffled, java.util.Random(seed + attempt * 104729L))
+            extraOrders += shuffled
+        }
+        // Alternate large and small parts so narrow leftovers are less likely to be stranded.
+        val byArea = expanded.sortedByDescending { area(it) }
+        val alternating = mutableListOf<CuttingPart>()
+        var low = byArea.lastIndex
+        var high = 0
+        while (high <= low) {
+            alternating += byArea[high++]
+            if (high <= low) alternating += byArea[low--]
+        }
+        extraOrders += alternating
+        extraOrders += alternating.asReversed()
+
         var best: Layout? = null
-        for (order in orders) {
+        for (order in orders + extraOrders) {
             for (scoreMode in 0..4) {
                 val candidate = packInOrder(order, sheetW, sheetH, max(0.0, kerf), scoreMode)
                 if (best == null || isBetter(candidate, best!!)) best = candidate
