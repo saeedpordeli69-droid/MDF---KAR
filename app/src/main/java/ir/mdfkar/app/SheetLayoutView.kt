@@ -42,6 +42,11 @@ internal class SheetLayoutView(
         textSize = dp(11).toFloat()
         textAlign = Paint.Align.RIGHT
     }
+    private val sheetInfoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AppTheme.TEXT
+        textSize = dp(9).toFloat()
+        textAlign = Paint.Align.LEFT
+    }
     private val usageTrackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = AppTheme.FIELD_BORDER
         style = Paint.Style.FILL
@@ -93,7 +98,7 @@ internal class SheetLayoutView(
         val sh = sheetHeight().toFloat()
         val pad = dp(12).toFloat()
         val availableW = width - pad * 2
-        val headerHeight = dp(30).toFloat()
+        val headerHeight = dp(44).toFloat()
         val availableH = height - pad * 2 - headerHeight
         if (availableW <= 0 || availableH <= 0 || sw <= 0f || sh <= 0f) return
 
@@ -105,14 +110,26 @@ internal class SheetLayoutView(
         val percent = (usage * 100.0).toInt()
         usageTextPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(
-            translate("استفاده از ورق: ${dimensionLabel(percent.toDouble())}٪", "Sheet usage: $percent%"),
+            translate("استفاده: ${dimensionLabel(percent.toDouble())}٪", "Used: $percent%"),
             width - pad,
             pad + usageTextPaint.textSize,
             usageTextPaint
         )
+        val emptyPercent = 100 - percent
+        val sheetInfo = translate(
+            "ابعاد: ${dimensionLabel(sw.toDouble())} × ${dimensionLabel(sh.toDouble())} | فضای خالی: ${dimensionLabel(emptyPercent.toDouble())}٪",
+            "Size: ${sw.toInt()} × ${sh.toInt()} mm | Free: $emptyPercent%"
+        )
+        sheetInfoPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText(
+            sheetInfo,
+            pad,
+            pad + dp(27).toFloat(),
+            sheetInfoPaint
+        )
         val barLeft = pad
         val barRight = width - pad
-        val barTop = pad + dp(18).toFloat()
+        val barTop = pad + dp(31).toFloat()
         val barBottom = barTop + dp(5).toFloat()
         val barRadius = dp(3).toFloat()
         canvas.drawRoundRect(barLeft, barTop, barRight, barBottom, barRadius, barRadius, usageTrackPaint)
