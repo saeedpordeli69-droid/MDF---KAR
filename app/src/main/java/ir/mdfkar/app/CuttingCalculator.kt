@@ -1,5 +1,6 @@
 package ir.mdfkar.app
 
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -81,7 +82,10 @@ object CuttingCalculator {
             expanded.sortedWith(compareByDescending<CuttingPart> { it.height / max(1.0, it.width) }.thenByDescending { area(it) }),
             expanded.sortedWith(compareByDescending<CuttingPart> { area(it) / max(1.0, max(it.width, it.height)) }.thenByDescending { area(it) }),
             expanded.sortedWith(compareBy<CuttingPart> { area(it) }.thenByDescending { max(it.width, it.height) }),
-            expanded.sortedWith(compareBy<CuttingPart> { max(it.width, it.height) }.thenBy { min(it.width, it.height) })
+            expanded.sortedWith(compareBy<CuttingPart> { max(it.width, it.height) }.thenBy { min(it.width, it.height) }),
+            expanded.sortedWith(compareByDescending<CuttingPart> { it.width + it.height }.thenBy { min(it.width, it.height) }),
+            expanded.sortedWith(compareByDescending<CuttingPart> { min(it.width, it.height) / max(1.0, max(it.width, it.height)) }.thenByDescending { area(it) }),
+            expanded.sortedWith(compareByDescending<CuttingPart> { max(it.width, it.height) / max(1.0, min(it.width, it.height)) }.thenByDescending { area(it) })
         )
 
         // Add deterministic multi-start trials. Mixed cabinet/table/counter orders often
@@ -92,7 +96,7 @@ object CuttingCalculator {
                 (part.width * 1000.0).toLong() * 17L + (part.height * 1000.0).toLong()
         }
         val extraOrders = mutableListOf<List<CuttingPart>>()
-        for (attempt in 0 until 18) {
+        for (attempt in 0 until 24) {
             val shuffled = expanded.toMutableList()
             java.util.Collections.shuffle(shuffled, java.util.Random(seed + attempt * 104729L))
             extraOrders += shuffled
@@ -111,7 +115,7 @@ object CuttingCalculator {
 
         var best: Layout? = null
         for (order in orders + extraOrders) {
-            for (scoreMode in 0..8) {
+            for (scoreMode in 0..10) {
                 val candidate = packInOrder(order, sheetW, sheetH, max(0.0, kerf), scoreMode)
                 if (best == null || isBetter(candidate, best!!)) best = candidate
             }
@@ -253,6 +257,17 @@ object CuttingCalculator {
             }
             8 -> {
                 primaryA = a.areaWaste; primaryB = b.areaWaste
+                secondaryA = -a.exactEdgeContacts.toDouble(); secondaryB = -b.exactEdgeContacts.toDouble()
+            }
+            9 -> {
+                // Favor balanced leftover dimensions; these remnants are often easier
+                // to reuse for shelves, rails, and other narrow cabinet parts.
+                primaryA = abs(a.longSide - a.shortSide); primaryB = abs(b.longSide - b.shortSide)
+                secondaryA = a.areaWaste; secondaryB = b.areaWaste
+            }
+            10 -> {
+                // First minimize the tighter leftover dimension, then favor edge fitting.
+                primaryA = a.shortSide; primaryB = b.shortSide
                 secondaryA = -a.exactEdgeContacts.toDouble(); secondaryB = -b.exactEdgeContacts.toDouble()
             }
             else -> { primaryA = a.shortSide; primaryB = b.shortSide; secondaryA = a.longSide; secondaryB = b.longSide }
