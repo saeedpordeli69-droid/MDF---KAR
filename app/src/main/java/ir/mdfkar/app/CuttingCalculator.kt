@@ -49,6 +49,7 @@ object CuttingCalculator {
         val result: CuttingPackResult,
         val freeArea: Double,
         val remnantScore: Double,
+        val usableRemnantScore: Double,
         val fragmentation: Int,
         val compactness: Double
     )
@@ -115,7 +116,7 @@ object CuttingCalculator {
 
         var best: Layout? = null
         for (order in orders + extraOrders) {
-            for (scoreMode in 0..10) {
+            for (scoreMode in 0..12) {
                 val candidate = packInOrder(order, sheetW, sheetH, max(0.0, kerf), scoreMode)
                 if (best == null || isBetter(candidate, best!!)) best = candidate
             }
@@ -134,6 +135,8 @@ object CuttingCalculator {
         if (a.freeArea > b.freeArea + eps) return false
         if (a.remnantScore > b.remnantScore + eps) return true
         if (a.remnantScore < b.remnantScore - eps) return false
+        if (a.usableRemnantScore > b.usableRemnantScore + eps) return true
+        if (a.usableRemnantScore < b.usableRemnantScore - eps) return false
         if (a.fragmentation != b.fragmentation) return a.fragmentation < b.fragmentation
         if (a.compactness < b.compactness - eps) return true
         if (a.compactness > b.compactness + eps) return false
@@ -228,9 +231,19 @@ object CuttingCalculator {
         val placedArea = placements.sumOf { it.width * it.height }
         val freeArea = max(0.0, sheetCount * sheetArea - placedArea)
         val remnantScore = freeBySheet.sumOf { freeRects -> freeRects.maxOfOrNull { it.w * it.h } ?: 0.0 }
+        // Prefer keeping at least one reasonably sized rectangular offcut on each sheet.
+        // A free rectangle counts as reusable only when both dimensions are meaningful,
+        // rather than merely having a large area in a very narrow strip.
+        val minReusableW = sheetW * 0.22
+        val minReusableH = sheetH * 0.22
+        val usableRemnantScore = freeBySheet.sumOf { freeRects ->
+            freeRects.filter { it.w >= minReusableW && it.h >= minReusableH }
+                .maxOfOrNull { it.w * it.h } ?: 0.0
+        }
         val fragmentation = freeBySheet.sumOf { it.size }
         val compactness = placements.sumOf { it.x + it.y }
-        return Layout(CuttingPackResult(placements, sheetCount), freeArea, remnantScore, fragmentation, compactness)
+        return Layout(CuttingPackResult(placements, sheetCount), freeArea, remnantScore,
+            usableRemnantScore, fragmentation, compactness)
     }
 
     private fun compareCandidate(a: Candidate, b: Candidate, scoreMode: Int): Int {
@@ -268,6 +281,16 @@ object CuttingCalculator {
             10 -> {
                 // First minimize the tighter leftover dimension, then favor edge fitting.
                 primaryA = a.shortSide; primaryB = b.shortSide
+                secondaryA = -a.exactEdgeContacts.toDouble(); secondaryB = -b.exactEdgeContacts.toDouble()
+            }
+            11 -> {
+                // Prioritize tight area fit, with edge contact as the tie-breaker.
+                primaryA = a.areaWaste; primaryB = b.areaWaste
+                secondaryA = -a.exactEdgeContacts.toDouble(); secondaryB = -b.exactEdgeContacts.toDouble()
+            }
+            12 -> {
+                // Favor placements that leave a more balanced rectangular remainder.
+                primaryA = abs(a.longSide - a.shortSide); primaryB = abs(b.longSide - b.shortSide)
                 secondaryA = -a.exactEdgeContacts.toDouble(); secondaryB = -b.exactEdgeContacts.toDouble()
             }
             else -> { primaryA = a.shortSide; primaryB = b.shortSide; secondaryA = a.longSide; secondaryB = b.longSide }
