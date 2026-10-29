@@ -41,7 +41,8 @@ object CuttingCalculator {
         val rotated: Boolean,
         val shortSide: Double,
         val longSide: Double,
-        val areaWaste: Double
+        val areaWaste: Double,
+        val exactEdgeContacts: Int
     )
     private data class Layout(
         val result: CuttingPackResult,
@@ -91,7 +92,7 @@ object CuttingCalculator {
                 (part.width * 1000.0).toLong() * 17L + (part.height * 1000.0).toLong()
         }
         val extraOrders = mutableListOf<List<CuttingPart>>()
-        for (attempt in 0 until 10) {
+        for (attempt in 0 until 18) {
             val shuffled = expanded.toMutableList()
             java.util.Collections.shuffle(shuffled, java.util.Random(seed + attempt * 104729L))
             extraOrders += shuffled
@@ -110,7 +111,7 @@ object CuttingCalculator {
 
         var best: Layout? = null
         for (order in orders + extraOrders) {
-            for (scoreMode in 0..6) {
+            for (scoreMode in 0..8) {
                 val candidate = packInOrder(order, sheetW, sheetH, max(0.0, kerf), scoreMode)
                 if (best == null || isBetter(candidate, best!!)) best = candidate
             }
@@ -177,7 +178,9 @@ object CuttingCalculator {
                             val dh = free.h - reserveH
                             val candidate = Candidate(
                                 sheet, free, w, h, rotated,
-                                min(dw, dh), max(dw, dh), free.w * free.h - w * h
+                                min(dw, dh), max(dw, dh), free.w * free.h - w * h,
+                                (if (reserveW >= free.w - 0.0001) 1 else 0) +
+                                    (if (reserveH >= free.h - 0.0001) 1 else 0)
                             )
                             if (best == null || compareCandidate(candidate, best!!, scoreMode) < 0) best = candidate
                         }
@@ -196,7 +199,9 @@ object CuttingCalculator {
                     val dh = sheetH - reserveH
                     val candidate = Candidate(
                         index, Rect(0.0, 0.0, sheetW, sheetH), w, h, rotated,
-                        min(dw, dh), max(dw, dh), sheetArea - w * h
+                        min(dw, dh), max(dw, dh), sheetArea - w * h,
+                        (if (reserveW >= sheetW - 0.0001) 1 else 0) +
+                            (if (reserveH >= sheetH - 0.0001) 1 else 0)
                     )
                     if (best == null || compareCandidate(candidate, best!!, scoreMode) < 0) best = candidate
                 }
@@ -242,6 +247,14 @@ object CuttingCalculator {
             4 -> { primaryA = a.shortSide + a.longSide; primaryB = b.shortSide + b.longSide; secondaryA = a.areaWaste; secondaryB = b.areaWaste }
             5 -> { primaryA = a.areaWaste; primaryB = b.areaWaste; secondaryA = a.shortSide; secondaryB = b.shortSide }
             6 -> { primaryA = a.shortSide; primaryB = b.shortSide; secondaryA = a.longSide; secondaryB = b.longSide }
+            7 -> {
+                primaryA = -a.exactEdgeContacts.toDouble(); primaryB = -b.exactEdgeContacts.toDouble()
+                secondaryA = a.shortSide; secondaryB = b.shortSide
+            }
+            8 -> {
+                primaryA = a.areaWaste; primaryB = b.areaWaste
+                secondaryA = -a.exactEdgeContacts.toDouble(); secondaryB = -b.exactEdgeContacts.toDouble()
+            }
             else -> { primaryA = a.shortSide; primaryB = b.shortSide; secondaryA = a.longSide; secondaryB = b.longSide }
         }
         val primary = primaryA.compareTo(primaryB)
