@@ -848,7 +848,7 @@ class MainActivity : Activity() {
                 layoutParams = LinearLayout.LayoutParams(dp(32), -2)
             })
             partsList.addView(row)
-            if (index < parts.lastIndex) partsList.addView(View(this).apply { setBackgroundColor(Color.rgb(28, 61, 89)); layoutParams = LinearLayout.LayoutParams(-1, dp(1)) })
+            if (index < multipliedParts.lastIndex) partsList.addView(View(this).apply { setBackgroundColor(Color.rgb(28, 61, 89)); layoutParams = LinearLayout.LayoutParams(-1, dp(1)) })
         }
         val summaryFa = """
             جزئیات برش:
