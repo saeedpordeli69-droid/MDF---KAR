@@ -42,7 +42,13 @@ object CuttingCalculator {
         val longSide: Double,
         val areaWaste: Double
     )
-    private data class Layout(val result: CuttingPackResult, val freeArea: Double)
+    private data class Layout(
+        val result: CuttingPackResult,
+        val freeArea: Double,
+        val remnantScore: Double,
+        val fragmentation: Int,
+        val compactness: Double
+    )
 
     fun packParts(
         parts: List<CuttingPart>,
@@ -60,6 +66,7 @@ object CuttingCalculator {
 
         // Reject no part silently: oversized pieces remain visible as overflow placements,
         // so the calling screen can report them to the user.
+        // Diverse deterministic orderings improve the chance of finding a tighter layout.
         val orders = listOf(
             expanded.sortedWith(compareByDescending<CuttingPart> { area(it) }.thenByDescending { max(it.width, it.height) }),
             expanded.sortedWith(compareByDescending<CuttingPart> { max(it.width, it.height) }.thenByDescending { min(it.width, it.height) }),
@@ -67,13 +74,20 @@ object CuttingCalculator {
             expanded.sortedWith(compareByDescending<CuttingPart> { it.width }.thenByDescending { it.height }),
             expanded.sortedWith(compareByDescending<CuttingPart> { it.height }.thenByDescending { it.width }),
             expanded.sortedWith(compareByDescending<CuttingPart> { it.width + it.height }.thenByDescending { area(it) }),
-            expanded.sortedWith(compareBy<CuttingPart> { min(it.width, it.height) }.thenByDescending { area(it) })
+            expanded.sortedWith(compareBy<CuttingPart> { min(it.width, it.height) }.thenByDescending { area(it) }),
+            expanded.sortedWith(compareByDescending<CuttingPart> { it.width / max(1.0, it.height) }.thenByDescending { area(it) }),
+            expanded.sortedWith(compareByDescending<CuttingPart> { it.height / max(1.0, it.width) }.thenByDescending { area(it) }),
+            expanded.sortedWith(compareByDescending<CuttingPart> { area(it) / max(1.0, max(it.width, it.height)) }.thenByDescending { area(it) }),
+            expanded.sortedWith(compareBy<CuttingPart> { area(it) }.thenByDescending { max(it.width, it.height) }),
+            expanded.sortedWith(compareBy<CuttingPart> { max(it.width, it.height) }.thenBy { min(it.width, it.height) })
         )
 
         var best: Layout? = null
         for (order in orders) {
-            val candidate = packInOrder(order, sheetW, sheetH, max(0.0, kerf))
-            if (best == null || isBetter(candidate, best!!)) best = candidate
+            for (scoreMode in 0..4) {
+                val candidate = packInOrder(order, sheetW, sheetH, max(0.0, kerf), scoreMode)
+                if (best == null || isBetter(candidate, best!!)) best = candidate
+            }
         }
         return best!!.result
     }
@@ -84,10 +98,14 @@ object CuttingCalculator {
         if (a.result.sheetCount != b.result.sheetCount) {
             return a.result.sheetCount < b.result.sheetCount
         }
-        // With sheet count tied, prefer less remaining free area, then fewer overflow parts.
         val eps = 0.0001
         if (a.freeArea < b.freeArea - eps) return true
         if (a.freeArea > b.freeArea + eps) return false
+        if (a.remnantScore > b.remnantScore + eps) return true
+        if (a.remnantScore < b.remnantScore - eps) return false
+        if (a.fragmentation != b.fragmentation) return a.fragmentation < b.fragmentation
+        if (a.compactness < b.compactness - eps) return true
+        if (a.compactness > b.compactness + eps) return false
         return a.result.placements.count { it.width > 0 && it.height > 0 } >
             b.result.placements.count { it.width > 0 && it.height > 0 }
     }
@@ -96,7 +114,8 @@ object CuttingCalculator {
         parts: List<CuttingPart>,
         sheetW: Double,
         sheetH: Double,
-        kerf: Double
+        kerf: Double,
+        scoreMode: Int
     ): Layout {
         val freeBySheet = mutableListOf<MutableList<Rect>>()
         val placements = mutableListOf<SheetPlacement>()
@@ -134,7 +153,7 @@ object CuttingCalculator {
                                 sheet, free, w, h, rotated,
                                 min(dw, dh), max(dw, dh), free.w * free.h - w * h
                             )
-                            if (best == null || compareCandidate(candidate, best!!) < 0) best = candidate
+                            if (best == null || compareCandidate(candidate, best!!, scoreMode) < 0) best = candidate
                         }
                     }
                 }
@@ -153,7 +172,7 @@ object CuttingCalculator {
                         index, Rect(0.0, 0.0, sheetW, sheetH), w, h, rotated,
                         min(dw, dh), max(dw, dh), sheetArea - w * h
                     )
-                    if (best == null || compareCandidate(candidate, best!!) < 0) best = candidate
+                    if (best == null || compareCandidate(candidate, best!!, scoreMode) < 0) best = candidate
                 }
             }
 
@@ -173,20 +192,30 @@ object CuttingCalculator {
         val sheetCount = freeBySheet.size
         val placedArea = placements.sumOf { it.width * it.height }
         val freeArea = max(0.0, sheetCount * sheetArea - placedArea)
-        return Layout(CuttingPackResult(placements, sheetCount), freeArea)
+        val remnantScore = freeBySheet.sumOf { freeRects -> freeRects.maxOfOrNull { it.w * it.h } ?: 0.0 }
+        val fragmentation = freeBySheet.sumOf { it.size }
+        val compactness = placements.sumOf { it.x + it.y }
+        return Layout(CuttingPackResult(placements, sheetCount), freeArea, remnantScore, fragmentation, compactness)
     }
 
-    private fun compareCandidate(a: Candidate, b: Candidate): Int {
-        // Priority 1: use the earliest already-open sheet whenever the part fits.
-        // This prevents moving a part to a later sheet merely to preserve a prettier offcut.
+    private fun compareCandidate(a: Candidate, b: Candidate, scoreMode: Int): Int {
         val sheet = a.sheet.compareTo(b.sheet)
         if (sheet != 0) return sheet
-
-        // Priority 2: within that sheet, choose the fit that leaves the most useful shape.
-        val short = a.shortSide.compareTo(b.shortSide)
-        if (short != 0) return short
-        val long = a.longSide.compareTo(b.longSide)
-        if (long != 0) return long
+        val primaryA: Double
+        val primaryB: Double
+        val secondaryA: Double
+        val secondaryB: Double
+        when (scoreMode) {
+            1 -> { primaryA = a.areaWaste; primaryB = b.areaWaste; secondaryA = a.shortSide; secondaryB = b.shortSide }
+            2 -> { primaryA = a.longSide; primaryB = b.longSide; secondaryA = a.shortSide; secondaryB = b.shortSide }
+            3 -> { primaryA = a.free.y; primaryB = b.free.y; secondaryA = a.free.x; secondaryB = b.free.x }
+            4 -> { primaryA = a.shortSide + a.longSide; primaryB = b.shortSide + b.longSide; secondaryA = a.areaWaste; secondaryB = b.areaWaste }
+            else -> { primaryA = a.shortSide; primaryB = b.shortSide; secondaryA = a.longSide; secondaryB = b.longSide }
+        }
+        val primary = primaryA.compareTo(primaryB)
+        if (primary != 0) return primary
+        val secondary = secondaryA.compareTo(secondaryB)
+        if (secondary != 0) return secondary
         return a.areaWaste.compareTo(b.areaWaste)
     }
 
