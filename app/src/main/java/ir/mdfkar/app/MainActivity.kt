@@ -1186,12 +1186,21 @@ class MainActivity : Activity() {
         }
 
         // The shared order model now owns material/thickness grouping and calls the existing cutter.
+        val cuttingPlans = sharedOrder.createCuttingPlan(sw, sh, kerf)
         val placements = mutableListOf<SheetPlacement>()
         var sheetOffset = 0
-        sharedOrder.createCuttingPlan(sw, sh, kerf).forEach { plan ->
+        cuttingPlans.forEach { plan ->
+            // Every material/thickness gets its own sheets, while sheet numbers stay
+            // continuous in the combined drawing so the user can navigate one plan.
             placements += plan.placements.map { it.copy(sheet = it.sheet + sheetOffset) }
             sheetOffset += plan.sheetCount
         }
+        val stockSummary = cuttingPlans.joinToString("\n") { plan ->
+            val stockLabel = "${plan.stockType} · ${fmt(plan.thicknessMm)} mm"
+            if (english) "  $stockLabel: ${plan.sheetCount} sheet(s)"
+            else "  $stockLabel: ${faDigits(plan.sheetCount.toString())} ورق"
+        }
+        val stockSummaryHeader = if (english) "Sheets by material/thickness:" else "تفکیک ورق بر اساس جنس و ضخامت:"
         latestPlacements = placements
         latestPvcMeters = pvcMeters
         latestSheetW = sw; latestSheetH = sh; latestSheetCount = sheetOffset; selectedSheetIndex = 0
@@ -1215,7 +1224,11 @@ class MainActivity : Activity() {
         val productSummary = orderProductLines.joinToString("\n") { line -> "${line.name}: ${line.parts.size} ${tr("نوع قطعه", "part types")}, ${tr("تعداد قطعه", "pieces")} ${line.parts.sumOf { it.quantity } * line.quantity}" }
         val customSummary = (customParts + independentParts).joinToString("\n") { part -> "${part.name}: ${fmt(part.lengthMm)}×${fmt(part.widthMm)} mm × ${part.quantity}" }
         val orderSummary = listOf(cabinetSummary, productSummary, customSummary).filter { it.isNotBlank() }.joinToString("\n")
-        resultText.text = if (english) "Mixed order\n$orderSummary\nSheets: $latestSheetCount\nEstimated area-based waste: ${fmt(waste)}%\nSeparate back panels: ${fmt(backArea)} m²\nEstimated PVC: ${fmt(pvcMeters)} m\n\nWarning: cutting layout is an estimate; verify dimensions and grain direction before production." else "سفارش مشترک\n$orderSummary\nتعداد ورق: ${faDigits(latestSheetCount.toString())}\nدورریز تخمینی بر اساس مساحت: ${faDigits(fmt(waste))}٪\nپشت‌بند جداگانه: ${faDigits(fmt(backArea))} مترمربع\nPVC تخمینی: ${faDigits(fmt(pvcMeters))} متر\n\nهشدار: نقشه برش تخمینی است؛ پیش از ساخت، ابعاد و جهت رگه را بررسی کنید."
+        resultText.text = if (english) {
+            "Mixed order\n$orderSummary\nSheets: $latestSheetCount\n$stockSummaryHeader\n$stockSummary\nEstimated area-based waste: ${fmt(waste)}%\nSeparate back panels: ${fmt(backArea)} m²\nEstimated PVC: ${fmt(pvcMeters)} m\n\nWarning: different materials/thicknesses use separate sheets. Cutting layout is an estimate; verify dimensions and grain direction before production."
+        } else {
+            "سفارش مشترک\n$orderSummary\nتعداد ورق: ${faDigits(latestSheetCount.toString())}\n$stockSummaryHeader\n$stockSummary\nدورریز تخمینی بر اساس مساحت: ${faDigits(fmt(waste))}٪\nپشت‌بند جداگانه: ${faDigits(fmt(backArea))} مترمربع\nPVC تخمینی: ${faDigits(fmt(pvcMeters))} متر\n\nهشدار: جنس‌ها و ضخامت‌های متفاوت از ورق‌های جدا استفاده می‌کنند. نقشه برش تخمینی است؛ پیش از ساخت، ابعاد و جهت رگه را بررسی کنید."
+        }
         updatePriceEstimate()
     }
 
