@@ -281,6 +281,29 @@ internal fun MainActivity.buildScreen() {
         familyGrid.addView(familyRowTwo)
         addTo(familyCard, familyGrid, 2)
 
+        // Product menu appears only after choosing one of the four main categories.
+        val categoryProductsCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            background = rounded(Color.rgb(10, 35, 58), 14, Color.rgb(39, 105, 159), 1)
+            setPadding(dp(12), dp(12), dp(12), dp(8))
+        }
+        val categoryProductsTitle = TextView(this).apply {
+            textSize = 15f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        }
+        val categoryProductsHint = TextView(this).apply {
+            textSize = 11f
+            setTextColor(AppTheme.TEXT_SECONDARY)
+            setPadding(0, dp(3), 0, dp(8))
+        }
+        val categoryProductsGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        categoryProductsCard.addView(categoryProductsTitle)
+        categoryProductsCard.addView(categoryProductsHint)
+        categoryProductsCard.addView(categoryProductsGrid)
+        addTo(familyCard, categoryProductsCard, 4)
+
         addTo(productTypeCard, productTypeSpinner, 2)
         val productTypeHint = TextView(this).apply {
             text = tr(
@@ -737,17 +760,83 @@ internal fun MainActivity.buildScreen() {
         applyProductSelection(productTypeSpinner.selectedItemPosition)
         updateProductPreview()
 
-        // The legacy selector is hidden, so category cards must explicitly apply the
-        // selected product and bring its form into view. setSelection alone may not
-        // notify the spinner when the requested index is already selected.
-        val familyProductIndexes = listOf(0, 4, 5, 6)
+        // Main category -> relevant product choices -> existing product form.
+        // The existing product calculation engine remains the source of all dimensions
+        // and generated parts; this layer only organizes product entry points.
+        data class CategoryProduct(val titleFa: String, val titleEn: String, val productIndex: Int)
+        val categoryMenus = listOf(
+            listOf(
+                CategoryProduct("کابینت آشپزخانه", "Kitchen cabinet", 0),
+                CategoryProduct("جزیره و اپن", "Kitchen island", 8),
+                CategoryProduct("کمد و پنتری", "Pantry cabinet", 1),
+                CategoryProduct("کابینت روشویی", "Bathroom vanity", 7)
+            ),
+            listOf(
+                CategoryProduct("پیشخوان فروشگاهی", "Shop counter", 4),
+                CategoryProduct("قفسه فروشگاهی", "Retail shelving", 2),
+                CategoryProduct("استند و ویترین", "Display stand", 8),
+                CategoryProduct("کانتر سفارشی", "Custom counter", 8)
+            ),
+            listOf(
+                CategoryProduct("میز اداری", "Office desk", 3),
+                CategoryProduct("کانتر پذیرش", "Reception counter", 5),
+                CategoryProduct("کتابخانه اداری", "Office bookcase", 2),
+                CategoryProduct("کمد اداری", "Office cabinet", 1)
+            ),
+            listOf(
+                CategoryProduct("دیوار تلویزیون", "TV wall", 6),
+                CategoryProduct("کتابخانه دکوراتیو", "Decorative bookcase", 2),
+                CategoryProduct("کمد دکوراتیو", "Decorative cabinet", 1),
+                CategoryProduct("طرح سفارشی", "Custom design", 8)
+            )
+        )
+        val categoryNamesFa = listOf("آشپزخانه", "فروشگاه", "اداری", "دکوراسیون داخلی")
+        val categoryNamesEn = listOf("Kitchen", "Store", "Office", "Interior decoration")
+
+        fun showCategoryProducts(categoryIndex: Int) {
+            val safeIndex = categoryIndex.coerceIn(0, categoryMenus.lastIndex)
+            categoryProductsTitle.text = tr(
+                "محصولات ${categoryNamesFa[safeIndex]}",
+                "${categoryNamesEn[safeIndex]} products"
+            )
+            categoryProductsHint.text = tr(
+                "محصول موردنظر را انتخاب کنید تا فرم و محاسبات آن باز شود.",
+                "Choose a product to open its form and calculations."
+            )
+            categoryProductsGrid.removeAllViews()
+            categoryMenus[safeIndex].forEach { item ->
+                val productButton = TextView(this).apply {
+                    text = tr(item.titleFa, item.titleEn)
+                    textSize = 14f
+                    gravity = Gravity.CENTER_VERTICAL
+                    setTextColor(Color.WHITE)
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setPadding(dp(14), dp(13), dp(14), dp(13))
+                    background = rounded(Color.rgb(16, 55, 82), 10, Color.rgb(43, 139, 190), 1)
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        productTypeSpinner.setSelection(item.productIndex)
+                        applyProductSelection(item.productIndex)
+                        val targetForm = if (item.productIndex == 0) cabinetCard else productDetailsCard
+                        (pageViews[0] as? ScrollView)?.post {
+                            (pageViews[0] as? ScrollView)?.smoothScrollTo(0, targetForm.top)
+                        }
+                    }
+                }
+                categoryProductsGrid.addView(productButton, LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(7)
+                })
+            }
+            categoryProductsCard.visibility = View.VISIBLE
+            (pageViews[0] as? ScrollView)?.post {
+                (pageViews[0] as? ScrollView)?.smoothScrollTo(0, categoryProductsCard.top)
+            }
+        }
+
         familyButtons.forEachIndexed { index, familyButton ->
             familyButton.setOnClickListener {
-                val productIndex = familyProductIndexes[index]
-                productTypeSpinner.setSelection(productIndex)
-                applyProductSelection(productIndex)
-                val targetForm = if (productIndex == 0) cabinetCard else productDetailsCard
-                (pageViews[0] as? ScrollView)?.smoothScrollTo(0, targetForm.top)
+                showCategoryProducts(index)
             }
         }
 
