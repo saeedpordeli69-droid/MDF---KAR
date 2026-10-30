@@ -550,7 +550,11 @@ class MainActivity : Activity() {
         return true
     }
 
-    /** Convert the selected product's generated parts into the shared typed order model. */
+    /**
+     * Bridge the existing product form into the modular design model, then use the
+     * modular converter as the single path into ProductOrderLine. Existing cabinet
+     * generation and its legacy calculation path remain untouched.
+     */
     internal fun productOrderLineFromParts(parts: List<CustomOrderPart>): ProductOrderLine {
         val kind = when (selectedProductTypeIndex) {
             1 -> ProductKind.WARDROBE
@@ -562,7 +566,58 @@ class MainActivity : Activity() {
             7 -> ProductKind.VANITY
             else -> ProductKind.CUSTOM
         }
-        val modelParts = parts.map { part ->
+
+        var cursorX = 0.0
+        val modularElements = parts.map { part ->
+            val n = part.name.lowercase(Locale.ROOT)
+            val isDoorOrDrawerFront = listOf("درب", "نمای کشو", "door", "drawer front").any { n.contains(it) }
+            val isBackOrInternalDrawer = listOf("پشت", "کف کشو", "بغل کشو", "drawer back", "drawer bottom", "drawer side", "back panel").any { n.contains(it) }
+            val isSide = !isBackOrInternalDrawer && listOf("بغل", "پهلو", "side panel", "bookcase side", "counter side").any { n.contains(it) }
+            val isFrontShelfOrTop = !isBackOrInternalDrawer && listOf("طبقه", "صفحه", "بالا و پایین", "بالا و کف", "کف بخش", "shelf", "tabletop", "counter top", "worktop", "top and bottom", "top/bottom", "bottom panel").any { n.contains(it) }
+            val doorPvc = isDoorOrDrawerFront && doorPvcCheck.isChecked
+            val frontPvc = !isDoorOrDrawerFront && ((isSide && sidePvcCheck.isChecked) || (isFrontShelfOrTop && shelfPvcCheck.isChecked))
+            val thickness = part.thicknessMm.coerceAtLeast(1.0)
+            val element = ModularElement(
+                name = part.name,
+                type = ModularElementType.CUSTOM,
+                xMm = cursorX,
+                yMm = 0.0,
+                zMm = 0.0,
+                widthMm = part.lengthMm,
+                depthMm = part.widthMm,
+                heightMm = thickness,
+                material = ModularMaterial(
+                    type = ModularMaterialType.MDF,
+                    label = "${fmt(thickness)} mm",
+                    thicknessMm = thickness
+                ),
+                quantity = part.quantity,
+                edgeFront = doorPvc || frontPvc,
+                edgeBack = doorPvc,
+                edgeLeft = doorPvc,
+                edgeRight = doorPvc,
+                grainSensitive = true
+            )
+            cursorX += part.lengthMm
+            element
+        }
+
+        val design = ModularProductDesign(
+            name = tr(kind.titleFa, kind.titleEn),
+            kind = kind,
+            widthMm = cursorX.coerceAtLeast(1.0),
+            heightMm = (parts.maxOfOrNull { it.thicknessMm } ?: 16.0).coerceAtLeast(1.0),
+            depthMm = (parts.maxOfOrNull { it.widthMm } ?: 1.0).coerceAtLeast(1.0),
+            elements = modularElements
+        )
+        val converted = ModularCutListConverter.convert(design)
+        if (converted.isSuccessful) {
+            return converted.orderLine!!.copy(name = tr(kind.titleFa, kind.titleEn))
+        }
+
+        // Safety fallback: keep the previous order conversion available if a future
+        // modular validation rule rejects legacy-generated dimensions.
+        val fallbackParts = parts.map { part ->
             val n = part.name.lowercase(Locale.ROOT)
             val isDoorOrDrawerFront = listOf("درب", "نمای کشو", "door", "drawer front").any { n.contains(it) }
             val isBackOrInternalDrawer = listOf("پشت", "کف کشو", "بغل کشو", "drawer back", "drawer bottom", "drawer side", "back panel").any { n.contains(it) }
@@ -571,25 +626,14 @@ class MainActivity : Activity() {
             val doorPvc = isDoorOrDrawerFront && doorPvcCheck.isChecked
             val frontPvc = !isDoorOrDrawerFront && ((isSide && sidePvcCheck.isChecked) || (isFrontShelfOrTop && shelfPvcCheck.isChecked))
             ProductPart(
-                name = part.name,
-                lengthMm = part.lengthMm,
-                widthMm = part.widthMm,
-                quantity = part.quantity,
-                thicknessMm = part.thicknessMm,
-                stockType = "MDF",
-                grainSensitive = false,
-                edgeTop = doorPvc || frontPvc,
-                edgeBottom = doorPvc,
-                edgeLeft = doorPvc,
-                edgeRight = doorPvc
+                name = part.name, lengthMm = part.lengthMm, widthMm = part.widthMm,
+                quantity = part.quantity, thicknessMm = part.thicknessMm,
+                stockType = "MDF", grainSensitive = true,
+                edgeTop = doorPvc || frontPvc, edgeBottom = doorPvc,
+                edgeLeft = doorPvc, edgeRight = doorPvc
             )
         }
-        return ProductOrderLine(
-            kind = kind,
-            name = tr(kind.titleFa, kind.titleEn),
-            parts = modelParts,
-            quantity = 1
-        )
+        return ProductOrderLine(kind = kind, name = tr(kind.titleFa, kind.titleEn), parts = fallbackParts)
     }
 
     internal fun buildCurrentProductOrderLine(): ProductOrderLine? {
