@@ -264,12 +264,13 @@ internal fun MainActivity.buildScreen() {
         }
         val familyRowOne = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val familyRowTwo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf(
+        val familyButtons = listOf(
             familyButton("آشپزخانه", "Kitchen", 0),
             familyButton("فروشگاه", "Store", 4),
             familyButton("اداری", "Office", 5),
             familyButton("دکوراسیون داخلی", "Interior decor", 6)
-        ).forEachIndexed { index, item ->
+        )
+        familyButtons.forEachIndexed { index, item ->
             val row = if (index < 2) familyRowOne else familyRowTwo
             row.addView(item, LinearLayout.LayoutParams(0, -2, 1f).apply {
                 if (index % 2 == 0) marginEnd = dp(6) else marginStart = dp(6)
@@ -735,6 +736,20 @@ internal fun MainActivity.buildScreen() {
         // the independent-cutting form selected under a Cabinet heading.
         applyProductSelection(productTypeSpinner.selectedItemPosition)
         updateProductPreview()
+
+        // The legacy selector is hidden, so category cards must explicitly apply the
+        // selected product and bring its form into view. setSelection alone may not
+        // notify the spinner when the requested index is already selected.
+        val familyProductIndexes = listOf(0, 4, 5, 6)
+        familyButtons.forEachIndexed { index, familyButton ->
+            familyButton.setOnClickListener {
+                val productIndex = familyProductIndexes[index]
+                productTypeSpinner.setSelection(productIndex)
+                applyProductSelection(productIndex)
+                val targetForm = if (productIndex == 0) cabinetCard else productDetailsCard
+                (pageViews[0] as? ScrollView)?.smoothScrollTo(0, targetForm.top)
+            }
+        }
 
         val calculateButton = button("محاسبه و نمایش نقشه برش  →", "Calculate & view cutting plan  →") {
             saveSettings()
