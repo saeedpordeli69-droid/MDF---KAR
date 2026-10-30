@@ -236,6 +236,50 @@ internal fun MainActivity.buildScreen() {
                 }
             }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         }
+        // PRODUCT FAMILIES: four simple entry points. They select an existing product
+        // type so the current calculation and order workflow remains untouched.
+        val familyCard = addSection(
+            homePage,
+            "دسته‌بندی کارها",
+            "Work categories",
+            "ابتدا حوزه کاری را انتخاب کنید",
+            "Choose a work category first"
+        )
+        val familyGrid = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        fun familyButton(titleFa: String, titleEn: String, productIndex: Int): TextView {
+            return TextView(this).apply {
+                text = tr(titleFa, titleEn)
+                gravity = Gravity.CENTER
+                textSize = 14f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(Color.WHITE)
+                setPadding(dp(8), dp(15), dp(8), dp(15))
+                background = rounded(Color.rgb(13, 68, 105), 14, Color.rgb(43, 139, 190), 1)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { productTypeSpinner.setSelection(productIndex) }
+            }
+        }
+        val familyRowOne = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val familyRowTwo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(
+            familyButton("آشپزخانه", "Kitchen", 0),
+            familyButton("فروشگاه", "Store", 4),
+            familyButton("اداری", "Office", 5),
+            familyButton("دکوراسیون داخلی", "Interior decor", 6)
+        ).forEachIndexed { index, item ->
+            val row = if (index < 2) familyRowOne else familyRowTwo
+            row.addView(item, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                if (index % 2 == 0) marginEnd = dp(6) else marginStart = dp(6)
+                bottomMargin = dp(8)
+            })
+        }
+        familyGrid.addView(familyRowOne)
+        familyGrid.addView(familyRowTwo)
+        addTo(familyCard, familyGrid, 2)
+
         addTo(productTypeCard, productTypeSpinner, 2)
         val productTypeHint = TextView(this).apply {
             text = tr(
