@@ -2,8 +2,8 @@ package ir.mdfkar.app
 
 /**
  * Converts a modular design into the existing order/cutting model.
- * This keeps the modular design as the source of truth while reusing
- * ProductOrderLine, ProductPart and the current cutting calculator.
+ * Container elements are design-only; ModularDesignBuilder creates their
+ * real manufacturing panels as child elements. Only those panels are cut.
  * All dimensions are millimetres.
  */
 object ModularCutListConverter {
@@ -17,13 +17,13 @@ object ModularCutListConverter {
     }
 
     /**
-     * Converts every material-bearing, non-opening element into one cut part.
-     * The thinnest dimension is treated as board thickness; the other two
-     * dimensions become the cutting face dimensions.
+     * Converts actual material-bearing panels into ProductPart rows.
+     * ENCLOSED_MODULE / DRAWER_MODULE / OPEN_SHELF_MODULE are containers,
+     * not physical boards, so they are deliberately excluded to prevent
+     * duplicate full-size parts alongside their generated child panels.
      *
-     * Edge flags are transferred in the same four-side order used by ProductPart.
-     * A later edge-map stage can translate these into a visual front/back/left/right
-     * drawing without changing the part IDs or cutting data.
+     * The dimension closest to the material thickness is treated as board
+     * thickness. The remaining two dimensions form the cutting face.
      */
     fun convert(
         design: ModularProductDesign,
@@ -31,7 +31,9 @@ object ModularCutListConverter {
         notes: String = ""
     ): ConversionResult {
         if (!design.isValid()) {
-            val issues = design.validationIssues().ifEmpty { listOf("ابعاد یا مشخصات طراحی معتبر نیست.") }
+            val issues = design.validationIssues().ifEmpty {
+                listOf("ابعاد یا مشخصات طراحی معتبر نیست.")
+            }
             return ConversionResult(null, emptyList(), issues)
         }
         if (quantity !in 1..1000) {
@@ -43,6 +45,16 @@ object ModularCutListConverter {
         val errors = mutableListOf<String>()
 
         design.elements.forEach { element ->
+            when (element.type) {
+                ModularElementType.ENCLOSED_MODULE,
+                ModularElementType.DRAWER_MODULE,
+                ModularElementType.OPEN_SHELF_MODULE -> {
+                    ignored += element.name
+                    return@forEach
+                }
+                else -> Unit
+            }
+
             if (!element.generatesBoardPart) {
                 ignored += element.name
                 return@forEach
@@ -101,7 +113,11 @@ object ModularCutListConverter {
 
         if (errors.isNotEmpty()) return ConversionResult(null, ignored, errors)
         if (parts.isEmpty()) {
-            return ConversionResult(null, ignored, listOf("در طراحی هیچ قطعه قابل برشی با متریال مشخص وجود ندارد."))
+            return ConversionResult(
+                null,
+                ignored,
+                listOf("در طراحی هیچ قطعه قابل برشی با متریال مشخص وجود ندارد.")
+            )
         }
 
         return ConversionResult(
