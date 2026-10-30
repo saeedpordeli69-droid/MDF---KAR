@@ -291,6 +291,10 @@ internal fun MainActivity.buildScreen() {
             setPadding(0, dp(4), 0, 0)
         }
         addTo(productTypeCard, productTypeHint, 1)
+        // Keep the legacy product selector and its listener for internal compatibility,
+        // but hide its card from the home screen. The four category buttons above
+        // continue selecting the corresponding product type.
+        productTypeCard.visibility = View.GONE
 
         val cabinetCard = addSection(homePage, "مشخصات کابینت", "Cabinet specifications", "نوع کابینت و ابعاد بدنه", "Cabinet type and carcass dimensions")
         val cabinetCardTitle = cabinetCard.getChildAt(0) as TextView
